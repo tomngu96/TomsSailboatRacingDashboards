@@ -1,0 +1,223 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.sailboatracing"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="34" />
+10
+11    <!-- Bluetooth Classic permissions for Android < 12 -->
+12    <uses-permission
+12-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:5:5-6:38
+13        android:name="android.permission.BLUETOOTH"
+13-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:5:22-65
+14        android:maxSdkVersion="30" />
+14-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:6:9-35
+15    <uses-permission
+15-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:7:5-8:38
+16        android:name="android.permission.BLUETOOTH_ADMIN"
+16-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:7:22-71
+17        android:maxSdkVersion="30" />
+17-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:8:9-35
+18
+19    <!-- Bluetooth permissions for Android 12+ -->
+20    <uses-permission
+20-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:11:5-12:58
+21        android:name="android.permission.BLUETOOTH_CONNECT"
+21-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:11:22-73
+22        android:usesPermissionFlags="neverForLocation" />
+22-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:12:9-55
+23    <uses-permission
+23-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:13:5-14:58
+24        android:name="android.permission.BLUETOOTH_SCAN"
+24-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:13:22-70
+25        android:usesPermissionFlags="neverForLocation" />
+25-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:14:9-55
+26
+27    <!-- Location for pre-Android 12 Bluetooth discovery and GPS -->
+28    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+28-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:17:5-79
+28-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:17:22-76
+29    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+29-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:18:5-81
+29-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:18:22-78
+30
+31    <!-- OSMDroid tile cache -->
+32    <uses-permission android:name="android.permission.INTERNET" />
+32-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:21:5-67
+32-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:21:22-64
+33    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+33-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:22:5-79
+33-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:22:22-76
+34    <uses-permission
+34-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:23:5-24:38
+35        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+35-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:23:22-78
+36        android:maxSdkVersion="32" />
+36-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:24:9-35
+37
+38    <uses-feature
+38-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:26:5-28:35
+39        android:name="android.hardware.bluetooth"
+39-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:27:9-50
+40        android:required="true" />
+40-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:28:9-32
+41
+42    <permission
+42-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+43        android:name="com.sailboatracing.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+43-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+44        android:protectionLevel="signature" />
+44-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+45
+46    <uses-permission android:name="com.sailboatracing.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+46-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+46-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+47
+48    <supports-screens
+48-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:9:5-12:40
+49        android:anyDensity="true"
+49-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:10:9-34
+50        android:largeScreens="true"
+50-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:11:9-36
+51        android:normalScreens="true" />
+51-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:12:9-37
+52
+53    <uses-feature
+53-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:14:5-16:36
+54        android:name="android.hardware.location.network"
+54-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:15:9-57
+55        android:required="false" />
+55-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:16:9-33
+56    <uses-feature
+56-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:17:5-19:36
+57        android:name="android.hardware.location.gps"
+57-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:18:9-53
+58        android:required="false" />
+58-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:19:9-33
+59    <uses-feature
+59-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:20:5-22:36
+60        android:name="android.hardware.telephony"
+60-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:21:9-50
+61        android:required="false" />
+61-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:22:9-33
+62    <uses-feature
+62-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:23:5-25:36
+63        android:name="android.hardware.wifi"
+63-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:24:9-45
+64        android:required="false" />
+64-->[org.osmdroid:osmdroid-android:6.1.18] C:\Users\usern\.gradle\caches\transforms-4\2134476691c8f7bb2d59c8938b1fa30f\transformed\jetified-osmdroid-android-6.1.18\AndroidManifest.xml:25:9-33
+65
+66    <application
+66-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:30:5-46:19
+67        android:allowBackup="true"
+67-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:31:9-35
+68        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+68-->[androidx.core:core:1.12.0] C:\Users\usern\.gradle\caches\transforms-4\f41efb211daceaa856bafe06654da2ba\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+69        android:debuggable="true"
+70        android:extractNativeLibs="false"
+71        android:label="@string/app_name"
+71-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:32:9-41
+72        android:supportsRtl="true"
+72-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:33:9-35
+73        android:testOnly="true"
+74        android:theme="@style/Theme.SailboatRacing" >
+74-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:34:9-52
+75        <activity
+75-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:36:9-45:20
+76            android:name="com.sailboatracing.MainActivity"
+76-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:37:13-41
+77            android:exported="true"
+77-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:38:13-36
+78            android:screenOrientation="portrait"
+78-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:39:13-49
+79            android:theme="@style/Theme.SailboatRacing" >
+79-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:40:13-56
+80            <intent-filter>
+80-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:41:13-44:29
+81                <action android:name="android.intent.action.MAIN" />
+81-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:42:17-69
+81-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:42:25-66
+82
+83                <category android:name="android.intent.category.LAUNCHER" />
+83-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:43:17-77
+83-->C:\Users\usern\OneDrive\Documents\sailboatgps\android\app\src\main\AndroidManifest.xml:43:27-74
+84            </intent-filter>
+85        </activity>
+86        <activity
+86-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\usern\.gradle\caches\transforms-4\b3061b89ce179ca9b8f16adda3e72acc\transformed\jetified-ui-tooling-release\AndroidManifest.xml:23:9-25:39
+87            android:name="androidx.compose.ui.tooling.PreviewActivity"
+87-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\usern\.gradle\caches\transforms-4\b3061b89ce179ca9b8f16adda3e72acc\transformed\jetified-ui-tooling-release\AndroidManifest.xml:24:13-71
+88            android:exported="true" />
+88-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\usern\.gradle\caches\transforms-4\b3061b89ce179ca9b8f16adda3e72acc\transformed\jetified-ui-tooling-release\AndroidManifest.xml:25:13-36
+89
+90        <provider
+90-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+91            android:name="androidx.startup.InitializationProvider"
+91-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:25:13-67
+92            android:authorities="com.sailboatracing.androidx-startup"
+92-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:26:13-68
+93            android:exported="false" >
+93-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:27:13-37
+94            <meta-data
+94-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+95                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+95-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:30:17-75
+96                android:value="androidx.startup" />
+96-->[androidx.emoji2:emoji2:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\1bc321a817199c8ac6dcabbd7676b1b9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:31:17-49
+97            <meta-data
+97-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\usern\.gradle\caches\transforms-4\3aad7b82caceb99f0a60d6cf676c3089\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+98                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+98-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\usern\.gradle\caches\transforms-4\3aad7b82caceb99f0a60d6cf676c3089\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+99                android:value="androidx.startup" />
+99-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\usern\.gradle\caches\transforms-4\3aad7b82caceb99f0a60d6cf676c3089\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+100            <meta-data
+100-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:29:13-31:52
+101                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+101-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:30:17-85
+102                android:value="androidx.startup" />
+102-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:31:17-49
+103        </provider>
+104
+105        <receiver
+105-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:34:9-52:20
+106            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+106-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:35:13-76
+107            android:directBootAware="false"
+107-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:36:13-44
+108            android:enabled="true"
+108-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:37:13-35
+109            android:exported="true"
+109-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:38:13-36
+110            android:permission="android.permission.DUMP" >
+110-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:39:13-57
+111            <intent-filter>
+111-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:40:13-42:29
+112                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+112-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:41:17-91
+112-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:41:25-88
+113            </intent-filter>
+114            <intent-filter>
+114-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:43:13-45:29
+115                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+115-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:44:17-85
+115-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:44:25-82
+116            </intent-filter>
+117            <intent-filter>
+117-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:46:13-48:29
+118                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+118-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:47:17-88
+118-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:47:25-85
+119            </intent-filter>
+120            <intent-filter>
+120-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:49:13-51:29
+121                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+121-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:50:17-95
+121-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\usern\.gradle\caches\transforms-4\757c5446af63209e6c3471240bd68c09\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:50:25-92
+122            </intent-filter>
+123        </receiver>
+124    </application>
+125
+126</manifest>
