@@ -1,26 +1,23 @@
 # TomsSailboatRacingDashboards
 
-A two‑part sailing instrumentation system to give sailors fast, accurate, race‑useful data such as historical speed and heading on a budget. The system consists of:
+A sailing instrumentation system to give sailors fast, accurate, race‑useful data such as historical speed and heading on a budget. The full system consists of:
 
-1. **A mobile app** (Android) that displays sailing metrics. I dont own an iphone and you need to pay a recurring fee to get something on the apple app store. 
+1. **A mobile app** (Android) that displays sailing metrics. 
 2. **An external hardware sensor module** built around a Teensy 4.0, u‑blox M9N GPS, and BNO080 IMU for high‑rate, high‑accuracy data.
 
-The app can run **stand‑alone** using the phone’s internal sensors, but accuracy is limited by the phone’s slow refresh rate. The full system shines when paired with the external hardware module. You can use a cheaper GPS module and probably get all parts for under $100 assuming you already own an android phone.
+The app can run **stand‑alone** using the phone’s internal sensors, but accuracy is limited by the phone’s slow refresh rate and accuracy which can be fairly bad (there may be smoothing applied over position noise). To get a semi-accurate read from your phone you must mount it to the boat or keep it stationary. The full system shines when paired with the external hardware module as you can secure that to the boat and walk around with your phone which is merely gathers and forms the data for display. You can use a cheaper GPS module and probably get all parts for under $100 assuming you already own an android phone.
 
 ### Primary dashboard
 <img src="Screenshot_20260511_013039_SailRacing.jpg" width="350">
 
 ### Sample of possible graphs
+this was taken from me running around the house so it's very spikey. 
 <img src="Screenshot_20260511_012744_SailRacing.jpg" width="350">
 
----
 
-## Why This Project Exists
-
-Most phones only provide:
-- 1 Hz GPS updates
-- Low‑accuracy heading
-- crappy apps you pay $20 for (this is free)
+### Disclaimer
+You should read the racing rules for whatever race you plan on racing in before using instruments, as they are sometimes banned.
+Also there's a lot of schools of thoughts on "sailing by the instruments"... I say just go out and sail but at a certain point you might be curious if heeling the boat over a few more degrees gives you a bit more speed, or if footing a bit more to get more speed gives you better VMG. This app ideally helps shine a light there so you can drive improvements through something measurable. Who knows if this will actually be useful or will have too much noise. I'm happy to take feature requests/feedback. 
 
 ---
 
@@ -34,14 +31,6 @@ The app contains:
 - Manual or auto count down timer with narration
 - Lift/header visualization (WIP)
 - Data logging
-
-### App Data Sources
-| Source | Update Rate | Notes |
-|--------|-------------|-------|
-| **Phone GPS** | ~1 Hz | Low accuracy, large latency, not suitable for racing |
-| **External Module** | 25 Hz | High‑rate, low‑latency, race‑grade data |
-
-The app automatically switches to high‑rate mode when the external module is connected via Bluetooth.
 
 ---
 
@@ -61,7 +50,8 @@ The app automatically switches to high‑rate mode when the external module is c
 - Optional: **sunlight‑readable display** for standalone mode
 
 ### Why This Hardware?
-- **M9N GPS**  
+- **sparkfun M9N GPS** 
+  - Ease of setup, you can get gPS modules way cheaper but I wanted something fairly plug and play with rich data. an m8n is sufficient 
   - 25 Hz update rate  
   - Excellent multipath rejection  
   - Fast reacquisition  
@@ -70,22 +60,25 @@ The app automatically switches to high‑rate mode when the external module is c
 
 - **IMU (BNO080)**  
   - Tilt‑compensated heading  
-  - Fast response during maneuvers  
+  - Fast response during maneuvers 
+  - GPS-only heading is unreliable at low speeds because heading is computed from small changes in position. The GPS speed is accurate because the receiver uses Doppler carrier frequency shift to measure velocity directly. Doppler gives smooth, high‑rate speed data, but heading still requires either significant movement or an IMU.
 
 - **Teensy 4.0**  
   - Extremely fast UBX parsing  
-  - Plenty of headroom for sensor fusion  
+  - Plenty of headroom for sensor fusion if we wanted to, we're a bit light on using the full power of the teensy
   - Low latency  
-  - I had one available - an ESP32 actually has a bluetooth module and may be cheaper/fast enough.
+  - Really I only chose this because I had one available - an ESP32 actually has a bluetooth module and may be cheaper/fast enough.
 
 - **HC‑05 bluetooth module**  
   - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and i think in practical applications is good enough for our scenario
   - ~100–200 kbps sustained
   - 5–10 ms latency*
+  - the teensy doesnt have bluetooth on board natively, dont buy one if youve an ESP32 or similar
 
 
 - **Android phone**
-  - It is very hard to find a cheap display that can be visible outdoors in sunlight. Most people own a phone with a good display so let's leverage that. Also it's easier to build an app and have the ability to interact with it via your touchscreen.
+  - It is very hard to find a cheap display that can be visible outdoors in sunlight. Most people own a phone with a good display so let's leverage that. Also it's easier to build an app and have the ability to interact with it via your touchscreen compared to a screen bound to the teensy. 
+  - There is a much higher chance I would get an app on the play store than the app store. I dont own an iphone and you need to pay a recurring fee to get something on the apple app store. 
 
 ---
 
@@ -100,17 +93,10 @@ The app automatically switches to high‑rate mode when the external module is c
 ### M9N GPS
 - **25 Hz**
 - Speed resolution:  
-  - u‑blox reports speed with **0.01 m/s resolution**  
-  - Converted to knots:  
-    
-
-\[
-    0.01\ \text{m/s} \approx 0.0194\ \text{knots}
-    \]
-
-
+  - u‑blox reports speed with **0.01 m/s resolution** == 0.0194 knots   
 - Practical accuracy: **±0.05 knots**
 - Heading usable down to ~0.5 knots when fused with IMU
+
 
 This is why the external module feels almost instant compared to a phone.
 
@@ -167,4 +153,4 @@ When GPS is active, GPS fixes trigger transmission instead.
 
 ---
 ### Wiring
-You can look at the GpsAndImuDataEmitterOverBluetooth which has the most recent wiring. It all text, a TODO is to diagram this into the readme. 
+You can look at the GpsAndImuDataEmitterOverBluetooth which has the most recent wiring. It's all text, a TODO is to diagram this into the readme. 
