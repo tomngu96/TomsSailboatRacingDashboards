@@ -1,6 +1,6 @@
 # TomsSailboatRacingDashboards
 
-A two‑part sailing instrumentation system designed to give sailors fast, accurate, race‑useful data such as historical speed and heading. The system consists of:
+A two‑part sailing instrumentation system to give sailors fast, accurate, race‑useful data such as historical speed and heading on a budget. The system consists of:
 
 1. **A mobile app** (Android) that displays sailing metrics. I dont own an iphone and you need to pay a recurring fee to get something on the apple app store. 
 2. **An external hardware sensor module** built around a Teensy 4.0, u‑blox M9N GPS, and BNO080 IMU for high‑rate, high‑accuracy data.
@@ -26,7 +26,7 @@ Most phones only provide:
 
 ## Component 1: The Mobile App
 
-The app displays:
+The app contains:
 - Current speed (knots)
 - Heading
 - Course over ground (COG)
@@ -45,14 +45,19 @@ The app automatically switches to high‑rate mode when the external module is c
 
 ---
 
-## 🛠️ Component 2: External Hardware Module
+## Component 2: External Hardware Module
 
 ### Hardware Used
 - **Teensy 4.0** (600 MHz MCU)
 - **Bluetooth Classic (HC‑05)** for Android streaming
-- **u‑blox M9N GPS** (SparkFun GPS‑15712 or equivalent)
+- **u‑blox M9N GPS** (SparkFun GPS‑15712 or equivalent). 
+  - 32db High Gain Cirocomm 5cm Active GPS Antenna Ceramic Antenna
 - **IMU** (BNO080)
-- **5V power supply** (battery or USB)
+- **5V power supply** (battery or USB breakout board)
+- solder in breadboard - for permanently mounting
+- tupperware to protect electronics
+- Optional: 3d printed enclosure, this is custom designed but is useful to orient + protect the board inside the protective case if the case is secured to the boat and we want to true up the heading based on the IMU. TODO is upload the stl
+- power bank
 - Optional: **sunlight‑readable display** for standalone mode
 
 ### Why This Hardware?
@@ -60,7 +65,8 @@ The app automatically switches to high‑rate mode when the external module is c
   - 25 Hz update rate  
   - Excellent multipath rejection  
   - Fast reacquisition  
-  - High‑resolution speed output  
+  - High‑resolution speed output 
+- u.fl antenna - You can generally pick one of either an onboard antenna, u.fl, or external SMA puck style antenna (this is in order from smallest to biggest). The antenna I chose is a good mix of size and performance and should fit inside
 
 - **IMU (BNO080)**  
   - Tilt‑compensated heading  
@@ -71,6 +77,12 @@ The app automatically switches to high‑rate mode when the external module is c
   - Plenty of headroom for sensor fusion  
   - Low latency  
   - I had one available - an ESP32 actually has a bluetooth module and may be cheaper/fast enough.
+
+- **HC‑05 bluetooth module**  
+  - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and i think in practical applications is good enough for our scenario
+  - ~100–200 kbps sustained
+  - 5–10 ms latency*
+
 
 - **Android phone**
   - It is very hard to find a cheap display that can be visible outdoors in sunlight. Most people own a phone with a good display so let's leverage that. Also it's easier to build an app and have the ability to interact with it via your touchscreen.
@@ -152,3 +164,7 @@ The packet rate is driven by the IMU:
 ```
 
 When GPS is active, GPS fixes trigger transmission instead.
+
+---
+### Wiring
+You can look at the GpsAndImuDataEmitterOverBluetooth which has the most recent wiring. It all text, a TODO is to diagram this into the readme. 
