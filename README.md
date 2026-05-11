@@ -70,7 +70,7 @@ The app contains:
   - Really I only chose this because I had one available - an ESP32 actually has a bluetooth module and may be cheaper/fast enough.
 
 - **HC‑05 bluetooth module**  
-  - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and i think in practical applications is good enough for our scenario
+  - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and I think in practical applications is good enough for our scenario
   - ~100–200 kbps sustained
   - 5–10 ms latency*
   - the teensy doesnt have bluetooth on board natively, dont buy one if youve an ESP32 or similar
