@@ -7,6 +7,12 @@ A two‑part sailing instrumentation system designed to give sailors fast, accur
 
 The app can run **stand‑alone** using the phone’s internal sensors, but accuracy is limited by the phone’s slow refresh rate. The full system shines when paired with the external hardware module. You can use a cheaper GPS module and probably get all parts for under $100 assuming you already own an android phone.
 
+### Primary dashboard
+<img src="Screenshot_20260511_013039_SailRacing.jpg" width="350">
+
+### Sample of possible graphs
+<img src="Screenshot_20260511_012744_SailRacing.jpg" width="350">
+
 ---
 
 ## Why This Project Exists
@@ -106,12 +112,16 @@ Communication uses **Bluetooth Classic (HC‑05)** for low latency and high thro
 ### Packet Format (example)
 
 Without GPS:  
+```
 "$SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAcc*CRC\r\n"  
 (“Without GPS:  $SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAccXX”)*
+```
 
 With GPS:  
+```
 "$SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAcc,lat,lon,sog,cog,fix*CRC\r\n"  
 (“With GPS:  $SAL,...,lat,lon,sog,cog,fixXX”)*
+```
 
 | Field | Meaning |
 | --- | --- |
@@ -125,7 +135,7 @@ With GPS:
 | ``imuAcc`` | IMU accuracy (0–3) |
 
 GPS‑augmented packet fields
-"SAL, ... ,%.6f,%.6f,%.2f,%.1f,%u"
+`"SAL, ... ,%.6f,%.6f,%.2f,%.1f,%u"`
 | Field | Meaning |
 | --- | --- |
 | ``lat`` | Latitude (deg, 6 decimals) |
@@ -136,7 +146,9 @@ GPS‑augmented packet fields
 
 The packet rate is driven by the IMU:
 
+```
 “40 ms = 25 Hz”
 (“enableARVRStabilizedRotationVector(40);  // 40 ms = 25 Hz”)
+```
 
 When GPS is active, GPS fixes trigger transmission instead.
