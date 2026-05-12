@@ -841,7 +841,7 @@ private fun RecordingBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1A0A0A), RoundedCornerShape(6.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1063,18 +1063,19 @@ private fun HeadedLiftedBanner(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 2.dp),
+                .padding(horizontal = 8.dp, vertical = 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(text = trendLabel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = trendTextColor)
-            TextButton(onClick = onToggleTack) {
-                Text(
-                    text = if (tack == Tack.STARBOARD) "STBD" else "PORT",
-                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                    color = if (tack == Tack.STARBOARD) PrimaryColor else Color(0xFFFFAB40)
-                )
-            }
+            Text(
+                text = if (tack == Tack.STARBOARD) "STBD" else "PORT",
+                fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                color = if (tack == Tack.STARBOARD) PrimaryColor else Color(0xFFFFAB40),
+                modifier = Modifier
+                    .clickable { onToggleTack() }
+                    .padding(vertical = 6.dp, horizontal = 4.dp)
+            )
         }
     }
 }
@@ -1101,7 +1102,7 @@ private fun TimerDisplay(timerState: com.sailboatracing.model.TimerState) {
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text = "RACE TIMER", fontSize = 10.sp, color = Color(0xFF888888))
@@ -1160,8 +1161,8 @@ private fun DashboardInlineChart(history: List<SensorData>, chartType: Dashboard
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

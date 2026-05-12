@@ -1,6 +1,9 @@
 package com.sailboatracing.ui.navigation
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Dashboard
@@ -19,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -60,7 +65,9 @@ fun NavGraph(viewModel: RaceViewModel) {
         containerColor = Color(0xFF0A0A0F),
         bottomBar = {
             NavigationBar(
-                containerColor = SurfaceColor
+                containerColor = SurfaceColor,
+                modifier = Modifier.height(48.dp),
+                tonalElevation = 0.dp
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
@@ -68,10 +75,19 @@ fun NavGraph(viewModel: RaceViewModel) {
                         icon = {
                             Icon(
                                 imageVector = screen.icon,
-                                contentDescription = screen.label
+                                contentDescription = screen.label,
+                                modifier = Modifier.size(20.dp)
                             )
                         },
-                        label = { Text(screen.label) },
+                        label = {
+                            Text(
+                                text = screen.label,
+                                fontSize = 9.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.offset(y = (-6).dp)
+                            )
+                        },
                         selected = selected,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = PrimaryColor,
