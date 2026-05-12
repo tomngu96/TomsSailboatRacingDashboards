@@ -303,10 +303,17 @@ fun DirectionRoseChart(
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("SOG", fontSize = 10.sp, color = Color(0xFFFFAB40))
-                    Text(
-                        text = "%.1f kts".format(currentSog),
-                        fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFAB40)
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "%.1f".format(currentSog),
+                            fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFAB40)
+                        )
+                        Text(
+                            text = " kts",
+                            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFAB40),
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("COG", fontSize = 10.sp, color = Color(0xFFFF4444))
