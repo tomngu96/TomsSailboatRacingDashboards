@@ -1,0 +1,36 @@
+# ── Android / Gradle ──────────────────────────────────────────────────────────
+.gradle/
+build/
+androidApp/build/
+androidApp/app/build/
+androidApp/local.properties
+androidApp/.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Generated / signing
+*.jks
+*.keystore
+google-services.json
+
+# ── Arduino / Teensy ──────────────────────────────────────────────────────────
+# Arduino IDE build cache
+/teensy/**/*.elf
+/teensy/**/*.hex
+/teensy/**/*.bin
+/teensy/**/*.map
+/teensy/**/*.lst
+/teensy/**/build/
+
+# ── OS rubbish ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+*.swp
+*.swo
+*~
+.vscode/
