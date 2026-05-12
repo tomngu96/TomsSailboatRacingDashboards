@@ -3,20 +3,22 @@
 A sailing instrumentation system to give sailors fast, accurate, race‑useful data such as historical speed and heading on a budget. The full system consists of:
 
 1. **A mobile app** (Android) that displays sailing metrics. 
-2. **An external hardware sensor module** built around a Teensy 4.0, u‑blox M9N GPS, and BNO080 IMU for high‑rate, high‑accuracy data.
+2. **An external hardware sensor module** built around a Teensy 4.0, u‑blox M9N GPS, and BNO080 IMU for high‑rate, fairly accurate data.
 
-The app can run **stand‑alone** using the phone’s internal sensors, but accuracy is limited by the phone’s slow refresh rate and accuracy which can be fairly bad (there may be smoothing applied over position noise). To get a semi-accurate read from your phone you must mount it to the boat or keep it stationary. The full system shines when paired with the external hardware module as you can secure that to the boat and walk around with your phone which is merely gathers and forms the data for display. You can use a cheaper GPS module and probably get all parts for under $100 assuming you already own an android phone.
+The app can run **stand‑alone** using the phone’s internal sensors, but is limited by the phone’s slow refresh rate and accuracy which can be fairly bad (there may be smoothing applied over position noise). To get a semi-accurate read from your phone you must mount it to the boat or keep it stationary on the boat. The full system shines when paired with the external hardware module as you can secure that to the boat and walk around with or mount your phone which is gathers and forms the data for display. You can use a cheaper GPS module and probably get all parts for under $100 assuming you already own an android phone.
 
 ### Primary dashboard
 <img src="Screenshot_20260511_013039_SailRacing.jpg" width="350">
 
 ### Sample of possible graphs
-this was taken from me running around the house so it's very spikey. 
+this was taken from me running around the house so the data is very erratic. 
+
 <img src="Screenshot_20260511_012744_SailRacing.jpg" width="350">
 
 
 ### Disclaimer
 You should read the racing rules for whatever race you plan on racing in before using instruments, as they are sometimes banned.
+
 Also there's a lot of schools of thoughts on "sailing by the instruments"... I say just go out and sail but at a certain point you might be curious if heeling the boat over a few more degrees gives you a bit more speed, or if footing a bit more to get more speed gives you better VMG. This app ideally helps shine a light there so you can drive improvements through something measurable. Who knows if this will actually be useful or will have too much noise. I'm happy to take feature requests/feedback. 
 
 ---
@@ -45,13 +47,13 @@ The app contains:
 - **5V power supply** (battery or USB breakout board)
 - solder in breadboard - for permanently mounting
 - tupperware to protect electronics
-- Optional: 3d printed enclosure, this is custom designed but is useful to orient + protect the board inside the protective case if the case is secured to the boat and we want to true up the heading based on the IMU. TODO is upload the stl
+- Optional: 3d printed enclosure, this is custom designed but is useful to orient + protect the board inside the protective case if the case is secured to the boat and we want to physically true up the heading based on the IMU. TODO is upload the stl
 - power bank
 - Optional: **sunlight‑readable display** for standalone mode
 
 ### Why This Hardware?
 - **sparkfun M9N GPS** 
-  - Ease of setup, you can get gPS modules way cheaper but I wanted something fairly plug and play with rich data. an m8n is sufficient 
+  - Ease of setup, you can get GPS modules way cheaper but I wanted something fairly plug and play with rich data. an m8n is sufficient 
   - 25 Hz update rate  
   - Excellent multipath rejection  
   - Fast reacquisition  
@@ -70,35 +72,15 @@ The app contains:
   - Really I only chose this because I had one available - an ESP32 actually has a bluetooth module and may be cheaper/fast enough.
 
 - **HC‑05 bluetooth module**  
-  - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and I think in practical applications is good enough for our scenario
+  - Has bluetooth classic (as opposed to LE), this helps with the continuous stream of packets and i think in practical applications is good enough for our scenario
   - ~100–200 kbps sustained
   - 5–10 ms latency*
-  - the teensy doesnt have bluetooth on board natively, dont buy one if youve an ESP32 or similar
+  - the teensy doesnt have bluetooth on board natively, dont buy one if youve an ESP32 or similar as the ESP32 has bluetooth and wifi natively
 
 
 - **Android phone**
   - It is very hard to find a cheap display that can be visible outdoors in sunlight. Most people own a phone with a good display so let's leverage that. Also it's easier to build an app and have the ability to interact with it via your touchscreen compared to a screen bound to the teensy. 
   - There is a much higher chance I would get an app on the play store than the app store. I dont own an iphone and you need to pay a recurring fee to get something on the apple app store. 
-
----
-
-## GPS Accuracy & Speed Resolution
-
-### Phone GPS
-- **1 Hz**
-- Speed resolution: ~0.1–0.2 knots
-- Large latency (0.5–1.5 seconds)
-- Heading unreliable below ~2–3 knots
-
-### M9N GPS
-- **25 Hz**
-- Speed resolution:  
-  - u‑blox reports speed with **0.01 m/s resolution** == 0.0194 knots   
-- Practical accuracy: **±0.05 knots**
-- Heading usable down to ~0.5 knots when fused with IMU
-
-
-This is why the external module feels almost instant compared to a phone.
 
 ---
 
