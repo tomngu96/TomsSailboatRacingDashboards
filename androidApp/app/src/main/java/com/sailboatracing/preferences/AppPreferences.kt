@@ -23,10 +23,12 @@ object AppPreferences {
     private const val KEY_NARRATE_TIMER = "narrate_timer"
     private const val KEY_GPS_STALE_THRESHOLD = "gps_stale_threshold"
     private const val KEY_SHOW_MAP = "show_map"
+    private const val KEY_HEADING_LINES = "heading_lines"
     private const val KEY_USE_PHONE_GPS = "use_phone_gps"
     private const val KEY_USE_PHONE_IMU = "use_phone_imu"
     private const val KEY_COG_WINDOW = "cog_window"
     private const val KEY_DASHBOARD_CHART = "dashboard_chart"
+    private const val KEY_MAX_RECORDING_HOURS = "max_recording_hours"
     private const val KEY_NTRIP_ENABLED = "ntrip_enabled"
     private const val KEY_NTRIP_CASTERS = "ntrip_casters"
     private const val KEY_NTRIP_SELECTED_ID = "ntrip_selected_id"
@@ -143,11 +145,13 @@ object AppPreferences {
         val narrateTimer: Boolean = true,
         val gpsStaleThresholdSeconds: Int = 5,
         val showMap: Boolean = true,
+        val showHeadingLines: Boolean = true,
         val usePhoneGps: Boolean = true,
         val usePhoneImu: Boolean = true,
         val cogWindowSeconds: Int = 1,
         val dashboardCharts: Set<DashboardChartType> = emptySet(),
-        val ntripEnabled: Boolean = false,
+        val maxRecordingHours: Int = 24,
+        val ntripEnabled: Boolean = true,
         val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
         val ntripSelectedCasterId: Int = 0,
         val ntripNextCasterId: Int = NtripCaster.DEFAULTS.size
@@ -162,10 +166,12 @@ object AppPreferences {
         narrateTimer: Boolean,
         gpsStaleThresholdSeconds: Int,
         showMap: Boolean,
+        showHeadingLines: Boolean,
         usePhoneGps: Boolean,
         usePhoneImu: Boolean,
         cogWindowSeconds: Int,
         dashboardCharts: Set<DashboardChartType>,
+        maxRecordingHours: Int,
         ntripEnabled: Boolean,
         ntripCasters: List<NtripCaster>,
         ntripSelectedCasterId: Int,
@@ -192,10 +198,12 @@ object AppPreferences {
             .putBoolean(KEY_NARRATE_TIMER, narrateTimer)
             .putInt(KEY_GPS_STALE_THRESHOLD, gpsStaleThresholdSeconds)
             .putBoolean(KEY_SHOW_MAP, showMap)
+            .putBoolean(KEY_HEADING_LINES, showHeadingLines)
             .putBoolean(KEY_USE_PHONE_GPS, usePhoneGps)
             .putBoolean(KEY_USE_PHONE_IMU, usePhoneImu)
             .putInt(KEY_COG_WINDOW, cogWindowSeconds)
             .putString(KEY_DASHBOARD_CHART, dashboardCharts.joinToString(",") { it.name })
+            .putInt(KEY_MAX_RECORDING_HOURS, maxRecordingHours)
             .putBoolean(KEY_NTRIP_ENABLED, ntripEnabled)
             .putString(KEY_NTRIP_CASTERS, castersJson)
             .putInt(KEY_NTRIP_SELECTED_ID, ntripSelectedCasterId)
@@ -213,6 +221,7 @@ object AppPreferences {
             narrateTimer = p.getBoolean(KEY_NARRATE_TIMER, true),
             gpsStaleThresholdSeconds = p.getInt(KEY_GPS_STALE_THRESHOLD, 5),
             showMap = p.getBoolean(KEY_SHOW_MAP, true),
+            showHeadingLines = p.getBoolean(KEY_HEADING_LINES, true),
             usePhoneGps = p.getBoolean(KEY_USE_PHONE_GPS, true),
             usePhoneImu = p.getBoolean(KEY_USE_PHONE_IMU, true),
             cogWindowSeconds = p.getInt(KEY_COG_WINDOW, 1),
@@ -221,21 +230,27 @@ object AppPreferences {
                 ?.mapNotNull { runCatching { DashboardChartType.valueOf(it.trim()) }.getOrNull() }
                 ?.toSet()
                 ?: emptySet(),
-            ntripEnabled = p.getBoolean(KEY_NTRIP_ENABLED, false),
+            maxRecordingHours = p.getInt(KEY_MAX_RECORDING_HOURS, 24),
+            ntripEnabled = p.getBoolean(KEY_NTRIP_ENABLED, true),
             ntripCasters = run {
                 val json = p.getString(KEY_NTRIP_CASTERS, null) ?: return@run NtripCaster.DEFAULTS
                 try {
                     val arr = JSONArray(json)
                     (0 until arr.length()).map { i ->
                         val o = arr.getJSONObject(i)
+                        val host = o.getString("host")
+                        val savedUsername = o.optString("username", "")
+                        val savedPassword = o.optString("password", "")
+                        // Back-fill credentials for known casters if they were saved before defaults were set
+                        val defaultCreds = NtripCaster.DEFAULTS.find { it.host == host }
                         NtripCaster(
                             id = o.getInt("id"),
                             name = o.getString("name"),
-                            host = o.getString("host"),
+                            host = host,
                             port = o.getInt("port"),
                             mountpoint = o.optString("mountpoint", ""),
-                            username = o.optString("username", ""),
-                            password = o.optString("password", "")
+                            username = if (savedUsername.isBlank() && defaultCreds != null) defaultCreds.username else savedUsername,
+                            password = if (savedPassword.isBlank() && defaultCreds != null) defaultCreds.password else savedPassword
                         )
                     }
                 } catch (_: Exception) { NtripCaster.DEFAULTS }
@@ -254,6 +269,7 @@ object AppPreferences {
             .remove(KEY_NARRATE_TIMER)
             .remove(KEY_GPS_STALE_THRESHOLD)
             .remove(KEY_SHOW_MAP)
+            .remove(KEY_HEADING_LINES)
             .remove(KEY_USE_PHONE_GPS)
             .remove(KEY_USE_PHONE_IMU)
             .remove(KEY_COG_WINDOW)

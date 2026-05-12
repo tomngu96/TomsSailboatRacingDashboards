@@ -33,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -113,28 +114,56 @@ fun DashboardScreen(viewModel: RaceViewModel) {
         // IMU heading on left, historical COG on right
         HeadingRow(
             hdgValue = data?.heading ?: 0f,
-            historicalCogDeg = state.historicalCogDeg
+            historicalCogDeg = state.historicalCogDeg,
+            imuAccuracy = data?.imuAccuracy ?: 0
         )
 
-        // Speed — large number with inline "kts" unit label
-        Row(
+        // Speed row — large kts number, heel angle to its right
+        val imuOk = (data?.imuAccuracy ?: 0) >= 1
+        val rollDeg = data?.roll ?: 0f
+        // Box lets speed stay truly centered while heel is anchored to the right edge,
+        // so varying heel digit width never shifts the speed number.
+        Box(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Bottom
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
-                fontSize = 80.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "kts",
-                fontSize = 20.sp,
-                color = Color(0xFF888888),
-                modifier = Modifier.padding(bottom = 14.dp)
-            )
+            // Speed — always centered
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
+                    fontSize = 80.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "kts",
+                    fontSize = 20.sp,
+                    color = Color(0xFF888888),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+            }
+            // Heel — pinned to right edge, never affects speed position
+            val heelAbs = abs(rollDeg)
+            val heelSuffix = if (!imuOk || heelAbs < 1f) "" else if (rollDeg > 0f) "P" else "S"
+            Column(
+                modifier = Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = if (imuOk) "%.1f°%s".format(heelAbs, heelSuffix) else "---.-°",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (imuOk) Color(0xFF00CFCF) else Color(0xFF444444),
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Text(
+                    text = "HEEL",
+                    fontSize = 11.sp,
+                    color = Color(0xFF666666)
+                )
+            }
         }
 
         // Headed/Lifted banner — compact vertical padding
@@ -175,6 +204,8 @@ fun DashboardScreen(viewModel: RaceViewModel) {
                 marks = state.marks,
                 activeMarkIndex = state.activeMarkIndex,
                 trailHistory = state.trailHistory,
+                showHeadingLines = state.showHeadingLines,
+                historicalCogDeg = state.historicalCogDeg,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(280.dp)
@@ -194,6 +225,14 @@ fun DashboardScreen(viewModel: RaceViewModel) {
                 }
             }
         }
+
+        RecordingBar(
+            isRecording = state.isRecording,
+            recordingStartMs = state.recordingStartMs,
+            recordingFilePath = state.recordingFilePath,
+            onStart = { viewModel.startRecording() },
+            onStop = { viewModel.stopRecording() }
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
     }
@@ -409,6 +448,8 @@ private fun RaceMap(
     marks: List<RaceMark>,
     activeMarkIndex: Int,
     trailHistory: List<SensorData>,
+    showHeadingLines: Boolean,
+    historicalCogDeg: Float?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -481,9 +522,39 @@ private fun RaceMap(
                     }
                 }
 
-                // Boat — orange chevron with black border
+                // Heading / COG projection lines — drawn before boat so marker renders on top
                 val hasPosition = latestData != null && (latestData.lat != 0.0 || latestData.lon != 0.0)
                 val hasFix = (latestData?.fixType ?: 0) >= 2
+                if (showHeadingLines && hasPosition) {
+                    val boatPt = GeoPoint(latestData!!.lat, latestData.lon)
+                    // Green — IMU heading (bow direction), only when IMU is calibrated
+                    if ((latestData.imuAccuracy) >= 1) {
+                        val hdgEnd = projectGeoPoint(latestData.lat, latestData.lon, latestData.heading.toDouble(), 1000.0)
+                        Polyline(mv).apply {
+                            setPoints(listOf(boatPt, hdgEnd))
+                            outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
+                            outlinePaint.strokeWidth = 3f
+                            outlinePaint.style = Paint.Style.STROKE
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            mv.overlays.add(this)
+                        }
+                    }
+                    // Red — COG (actual course over ground), only when moving and fix active
+                    val cogDeg = historicalCogDeg ?: latestData.cogDeg
+                    if (hasFix && latestData.sogKts >= 0.3f) {
+                        val cogEnd = projectGeoPoint(latestData.lat, latestData.lon, cogDeg.toDouble(), 1000.0)
+                        Polyline(mv).apply {
+                            setPoints(listOf(boatPt, cogEnd))
+                            outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)
+                            outlinePaint.strokeWidth = 3f
+                            outlinePaint.style = Paint.Style.STROKE
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            mv.overlays.add(this)
+                        }
+                    }
+                }
+
+                // Boat — orange chevron with black border
                 if (hasPosition) {
                     val boatPoint = GeoPoint(latestData!!.lat, latestData.lon)
                     Marker(mv).apply {
@@ -584,6 +655,22 @@ private fun RaceMap(
             ) { Text("CENTER", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Map helpers
+// ---------------------------------------------------------------------------
+
+/** Destination point given start lat/lon, bearing (degrees true), distance (metres). */
+private fun projectGeoPoint(lat: Double, lon: Double, bearingDeg: Double, distanceM: Double): GeoPoint {
+    val R = 6_371_000.0
+    val d = distanceM / R
+    val lat1 = Math.toRadians(lat)
+    val lon1 = Math.toRadians(lon)
+    val brng = Math.toRadians(bearingDeg)
+    val lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng))
+    val lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2))
+    return GeoPoint(Math.toDegrees(lat2), Math.toDegrees(lon2))
 }
 
 // ---------------------------------------------------------------------------
@@ -723,6 +810,61 @@ private fun committeeEndBitmapDrawable(context: Context): BitmapDrawable {
 }
 
 // ---------------------------------------------------------------------------
+// Recording bar
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun RecordingBar(
+    isRecording: Boolean,
+    recordingStartMs: Long,
+    recordingFilePath: String,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    var elapsedText by remember { mutableStateOf("") }
+
+    LaunchedEffect(isRecording, recordingStartMs) {
+        if (!isRecording) { elapsedText = ""; return@LaunchedEffect }
+        while (true) {
+            val elapsed = System.currentTimeMillis() - recordingStartMs
+            val h = elapsed / 3_600_000
+            val m = (elapsed % 3_600_000) / 60_000
+            val s = (elapsed % 60_000) / 1_000
+            elapsedText = "%02d:%02d:%02d".format(h, m, s)
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+
+    if (isRecording) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1A0A0A), RoundedCornerShape(6.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(8.dp).background(Color(0xFFFF4444), CircleShape))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("REC  $elapsedText", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = onStop) {
+                Text("STOP", color = Color(0xFFFF8888), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    } else {
+        OutlinedButton(
+            onClick = onStart,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF888888)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF333333))
+        ) {
+            Text("⏺  START RECORDING", fontSize = 12.sp)
+        }
+    }
+}
+
 // Status bar
 // ---------------------------------------------------------------------------
 
@@ -737,14 +879,17 @@ private fun StatusBar(
     gpsStale: Boolean
 ) {
     val imuText = when {
-        connected      -> "BT IMU"
-        phoneImuActive -> "PHONE IMU"
-        else           -> "NO IMU"
+        connected && imuAccuracy >= 1 -> "BT IMU"
+        connected                     -> "IMU INIT"
+        phoneImuActive                -> "PHONE IMU"
+        else                          -> "NO IMU"
     }
     val imuColor = when {
-        connected      -> Color(0xFF00FF88)
-        phoneImuActive -> Color(0xFFFFAB40)
-        else           -> Color(0xFFFF4444)
+        connected && imuAccuracy >= 2  -> Color(0xFF00FF88)
+        connected && imuAccuracy >= 1  -> Color(0xFFFFAB40)
+        connected                      -> Color(0xFFFF8800)
+        phoneImuActive                 -> Color(0xFFFFAB40)
+        else                           -> Color(0xFFFF4444)
     }
     val gpsText = when {
         connected && rtkStatus == 2    -> "RTK FIXED"
@@ -794,7 +939,7 @@ private fun StatusBar(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?) {
+private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?, imuAccuracy: Int) {
     val accumulatedDeg = remember { mutableStateOf(hdgValue) }
     val prevRawValue = remember { mutableStateOf(hdgValue) }
 
@@ -823,21 +968,22 @@ private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
+            val imuOk = imuAccuracy >= 1
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "↑",
                     fontSize = 40.sp,
-                    color = PrimaryColor,
+                    color = if (imuOk) PrimaryColor else Color(0xFF555555),
                     modifier = Modifier.rotate(animatedRotation)
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = "%.1f°".format(hdgValue),
+                    text = if (imuOk) "%.1f°".format(hdgValue) else "---.-°",
                     fontSize = 40.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = if (imuOk) Color.White else Color(0xFF555555),
                     maxLines = 1,
                     softWrap = false
                 )
@@ -851,7 +997,7 @@ private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?) {
             }
         }
 
-        // Right: Smaller COG value
+        // Right: COG
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = if (historicalCogDeg != null) "%.1f°".format(historicalCogDeg) else "---.-",

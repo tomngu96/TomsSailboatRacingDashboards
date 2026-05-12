@@ -8,7 +8,9 @@ import com.sailboatracing.algorithm.HeadedLiftedDetector
 import com.sailboatracing.algorithm.StartLineCalculator
 import com.sailboatracing.algorithm.VMGCalculator
 import com.sailboatracing.bluetooth.BluetoothService
+import com.sailboatracing.session.SessionRecorder
 import com.sailboatracing.bluetooth.NtripClient
+import com.sailboatracing.bluetooth.NtripSourceEntry
 import com.sailboatracing.bluetooth.PacketParser
 import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.location.PhoneGpsService
@@ -35,6 +37,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
@@ -50,6 +53,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private var phoneGpsJob: Job? = null
     private var phoneImuJob: Job? = null
     private var ntripJob: Job? = null
+    private val sessionRecorder = SessionRecorder(app.applicationContext)
     var nextMarkId = 0
     var nextCasterId = NtripCaster.DEFAULTS.size
 
@@ -127,10 +131,12 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 narrateTimer = settings.narrateTimer,
                 gpsStaleThresholdSeconds = settings.gpsStaleThresholdSeconds,
                 showMap = settings.showMap,
+                showHeadingLines = settings.showHeadingLines,
                 usePhoneGps = settings.usePhoneGps,
                 usePhoneImu = settings.usePhoneImu,
                 cogWindowSeconds = settings.cogWindowSeconds,
                 dashboardCharts = settings.dashboardCharts,
+                maxRecordingHours = settings.maxRecordingHours,
                 ntripEnabled = settings.ntripEnabled,
                 ntripCasters = settings.ntripCasters,
                 ntripSelectedCasterId = settings.ntripSelectedCasterId
@@ -161,10 +167,12 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             narrateTimer = s.narrateTimer,
             gpsStaleThresholdSeconds = s.gpsStaleThresholdSeconds,
             showMap = s.showMap,
+            showHeadingLines = s.showHeadingLines,
             usePhoneGps = s.usePhoneGps,
             usePhoneImu = s.usePhoneImu,
             cogWindowSeconds = s.cogWindowSeconds,
             dashboardCharts = s.dashboardCharts,
+            maxRecordingHours = s.maxRecordingHours,
             ntripEnabled = s.ntripEnabled,
             ntripCasters = s.ntripCasters,
             ntripSelectedCasterId = s.ntripSelectedCasterId,
@@ -513,6 +521,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         saveSettings()
     }
 
+    fun setShowHeadingLines(show: Boolean) {
+        _state.update { it.copy(showHeadingLines = show) }
+        saveSettings()
+    }
+
     fun setGpsStaleThreshold(seconds: Int) {
         _state.update { it.copy(gpsStaleThresholdSeconds = seconds) }
         saveSettings()
@@ -578,6 +591,17 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Cycle through the ranked nearby list without re-fetching the source table
+    fun ntripSelectMountpointIndex(index: Int) {
+        val mounts = _state.value.ntripNearbyMountpoints
+        if (index !in mounts.indices) return
+        val caster = _state.value.ntripCasters.find { it.id == _state.value.ntripSelectedCasterId } ?: return
+        _state.update { it.copy(ntripAutoMountpointIndex = index) }
+        if (_state.value.ntripEnabled && _state.value.connected) {
+            launchNtripStream(caster, mounts[index])
+        }
+    }
+
     fun addNtripCaster(name: String, host: String, port: Int, mountpoint: String, username: String, password: String) {
         val id = nextCasterId++
         val caster = NtripCaster(id, name, host, port, mountpoint, username, password)
@@ -611,25 +635,58 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         val s = _state.value
         if (!s.ntripEnabled) return
         val caster = s.ntripCasters.find { it.id == s.ntripSelectedCasterId } ?: return
-        if (caster.host.isBlank() || caster.mountpoint.isBlank()) return
+        if (caster.host.isBlank()) return
+
+        // Manual mountpoint — skip source table fetch
+        if (caster.mountpoint.isNotBlank()) {
+            launchNtripStream(caster, caster.mountpoint)
+            return
+        }
+
+        // Auto-select: fetch source table, rank by distance, start streaming nearest
         ntripJob?.cancel()
         ntripJob = viewModelScope.launch {
-            _state.update { it.copy(ntripConnected = false) }
+            _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = "") }
+            val entries = NtripClient.fetchSourceTable(caster.host, caster.port)
+            val free = entries.filter { it.fee == "N" }
+            if (free.isEmpty()) return@launch
+            val data = _state.value.latestData
+            val refLat = data?.lat?.takeIf { it != 0.0 } ?: 47.6062  // Seattle fallback
+            val refLon = data?.lon?.takeIf { it != 0.0 } ?: -122.3321
+            val ranked = free.sortedBy { haversineNm(refLat, refLon, it.lat, it.lon) }
+                              .map { it.mountpoint }
+            val index = _state.value.ntripAutoMountpointIndex.coerceIn(0, ranked.size - 1)
+            val mount = ranked[index]
+            _state.update {
+                it.copy(ntripNearbyMountpoints = ranked, ntripAutoMountpointIndex = index, ntripAutoMountpoint = mount)
+            }
             try {
-                NtripClient.stream(
-                    host = caster.host,
-                    port = caster.port,
-                    mountpoint = caster.mountpoint,
-                    username = caster.username,
-                    password = caster.password
-                ).collect { bytes ->
-                    if (_state.value.connected) {
-                        bluetoothService.sendBytes(bytes)
-                        if (!_state.value.ntripConnected) {
-                            _state.update { it.copy(ntripConnected = true) }
+                NtripClient.stream(caster.host, caster.port, mount, caster.username, caster.password)
+                    .collect { bytes ->
+                        if (_state.value.connected) {
+                            bluetoothService.sendBytes(bytes)
+                            if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true) }
                         }
                     }
-                }
+            } finally {
+                _state.update { it.copy(ntripConnected = false) }
+            }
+        }
+    }
+
+    // Restarts the NTRIP stream with a known mountpoint (no re-fetch — reuses ranked list)
+    private fun launchNtripStream(caster: NtripCaster, mountpoint: String) {
+        ntripJob?.cancel()
+        ntripJob = viewModelScope.launch {
+            _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = mountpoint) }
+            try {
+                NtripClient.stream(caster.host, caster.port, mountpoint, caster.username, caster.password)
+                    .collect { bytes ->
+                        if (_state.value.connected) {
+                            bluetoothService.sendBytes(bytes)
+                            if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true) }
+                        }
+                    }
             } finally {
                 _state.update { it.copy(ntripConnected = false) }
             }
@@ -639,7 +696,35 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private fun stopNtrip() {
         ntripJob?.cancel()
         ntripJob = null
-        _state.update { it.copy(ntripConnected = false) }
+        _state.update {
+            it.copy(ntripConnected = false, ntripAutoMountpoint = "", ntripNearbyMountpoints = emptyList(), ntripAutoMountpointIndex = 0)
+        }
+    }
+
+    private fun haversineNm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val sdLat = sin(dLat / 2)
+        val sdLon = sin(dLon / 2)
+        val a = sdLat * sdLat + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sdLon * sdLon
+        return 3440.065 * 2 * atan2(sqrt(a), sqrt(1 - a))
+    }
+
+    // ── Session Recording ──────────────────────────────────────────────
+
+    fun startRecording() {
+        val path = sessionRecorder.start(_state.value.maxRecordingHours) ?: return
+        _state.update { it.copy(isRecording = true, recordingStartMs = System.currentTimeMillis(), recordingFilePath = path) }
+    }
+
+    fun stopRecording() {
+        sessionRecorder.stop()
+        _state.update { it.copy(isRecording = false) }
+    }
+
+    fun setMaxRecordingHours(hours: Int) {
+        _state.update { it.copy(maxRecordingHours = hours) }
+        saveSettings()
     }
 
     fun resetSettings() {
@@ -747,12 +832,16 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         stopPhoneGps()
         stopPhoneImu()
         stopNtrip()
+        sessionRecorder.stop()
         bluetoothService.disconnect()
     }
 
     // ── Data Processing ────────────────────────────────────────────────
 
-    private fun filterHeading(incoming: Float): Float {
+    // Returns the last known good heading when accuracy is 0 so GPS data still flows cleanly
+    // without the headed/lifted detector or UI being poisoned by uncalibrated IMU values.
+    private fun filterHeading(incoming: Float, accuracy: Int): Float {
+        if (accuracy < 1) return lastGoodHeading ?: incoming  // discard, keep last known
         val last = lastGoodHeading
         if (last == null) {
             lastGoodHeading = incoming
@@ -780,10 +869,19 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             data.copy(cogDeg = currentLast.cogDeg)
         } else data
 
-        val filteredData = gpsAugmented.copy(heading = filterHeading(gpsAugmented.heading))
+        val filteredData = gpsAugmented.copy(heading = filterHeading(gpsAugmented.heading, gpsAugmented.imuAccuracy))
 
-        val detectorCutoff = filteredData.timestampMs - 180_000L
-        detectorHistory = (detectorHistory + filteredData).filter { it.timestampMs >= detectorCutoff }
+        // Only feed the headed/lifted detector when IMU is actually calibrated
+        if (gpsAugmented.imuAccuracy >= 1) {
+            val detectorCutoff = filteredData.timestampMs - 180_000L
+            detectorHistory = (detectorHistory + filteredData).filter { it.timestampMs >= detectorCutoff }
+        }
+
+        // Record to session file if active; auto-stop when max duration reached
+        if (_state.value.isRecording) {
+            val continued = sessionRecorder.record(filteredData)
+            if (!continued) _state.update { it.copy(isRecording = false) }
+        }
 
         _state.update { current ->
             val windowMs = current.historyWindowSeconds * 1000L

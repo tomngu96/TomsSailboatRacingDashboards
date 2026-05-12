@@ -13,8 +13,8 @@ data class NtripCaster(
 ) {
     companion object {
         val DEFAULTS = listOf(
-            NtripCaster(id = 0, name = "RTK2go", host = "rtk2go.com", port = 2101),
-            NtripCaster(id = 1, name = "Centipede", host = "caster.centipede.fr", port = 2101)
+            NtripCaster(id = 0, name = "RTK2go", host = "rtk2go.com", port = 2101, username = "rtk2go", password = "none"),
+            NtripCaster(id = 1, name = "Centipede", host = "caster.centipede.fr", port = 2101, username = "centipede", password = "centipede")
         )
     }
 }
@@ -107,6 +107,7 @@ data class RaceState(
     val timerState: TimerState = TimerState(),
     val historyWindowSeconds: Int = 30,
     val showMap: Boolean = true,
+    val showHeadingLines: Boolean = true,
     val usePhoneGps: Boolean = true,
     val phoneGpsActive: Boolean = false,
     val usePhoneImu: Boolean = true,
@@ -127,9 +128,18 @@ data class RaceState(
     val cogWindowSeconds: Int = 1,
     val historicalCogDeg: Float? = null,
     val dashboardCharts: Set<DashboardChartType> = emptySet(),
-    // NTRIP — settings persisted, ntripConnected is runtime status only
-    val ntripEnabled: Boolean = false,
+    // Session recording — isRecording/startMs/filePath are runtime only, maxRecordingHours persisted
+    val isRecording: Boolean = false,
+    val recordingStartMs: Long = 0L,
+    val recordingFilePath: String = "",
+    val maxRecordingHours: Int = 24,
+    // NTRIP — settings persisted, runtime fields (ntripConnected/Auto*) are not persisted
+    val ntripEnabled: Boolean = true,
     val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
     val ntripSelectedCasterId: Int = 0,
-    val ntripConnected: Boolean = false
+    val ntripConnected: Boolean = false,
+    // Auto-select state (populated at connect time when mountpoint is blank)
+    val ntripAutoMountpoint: String = "",
+    val ntripNearbyMountpoints: List<String> = emptyList(),
+    val ntripAutoMountpointIndex: Int = 0
 )

@@ -7,9 +7,71 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.net.Socket
 
+data class NtripSourceEntry(
+    val mountpoint: String,
+    val lat: Double,
+    val lon: Double,
+    val format: String,
+    val carrier: Int,
+    val fee: String
+)
+
 object NtripClient {
+
+    /**
+     * Fetches the NTRIP source table from a caster and returns all stream entries.
+     * Returns an empty list silently on any network or parse failure.
+     */
+    suspend fun fetchSourceTable(host: String, port: Int): List<NtripSourceEntry> =
+        withContext(Dispatchers.IO) {
+            val socket = try {
+                Socket(host, port).apply { soTimeout = 15_000 }
+            } catch (_: Exception) {
+                return@withContext emptyList()
+            }
+            try {
+                val request = "GET / HTTP/1.0\r\n" +
+                    "User-Agent: NTRIP SailRacing/1.0\r\n" +
+                    "Accept: */*\r\n" +
+                    "\r\n"
+                socket.getOutputStream().write(request.toByteArray(Charsets.US_ASCII))
+                socket.getOutputStream().flush()
+
+                val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
+                val entries = mutableListOf<NtripSourceEntry>()
+                var inBody = false
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val l = line ?: break
+                    if (!inBody) {
+                        if (l.isBlank()) inBody = true
+                        continue
+                    }
+                    if (l.trimEnd() == "ENDSOURCETABLE") break
+                    if (!l.startsWith("STR;")) continue
+                    val f = l.split(";")
+                    if (f.size < 17) continue
+                    val lat = f[9].toDoubleOrNull() ?: continue
+                    val lon = f[10].toDoubleOrNull() ?: continue
+                    entries.add(NtripSourceEntry(
+                        mountpoint = f[1],
+                        lat = lat,
+                        lon = lon,
+                        format = f[3],
+                        carrier = f[5].toIntOrNull() ?: 0,
+                        fee = f[16]
+                    ))
+                }
+                entries
+            } catch (_: Exception) {
+                emptyList()
+            } finally {
+                try { socket.close() } catch (_: Exception) {}
+            }
+        }
 
     /**
      * Connects to an NTRIP caster and emits RTCM3 binary chunks.

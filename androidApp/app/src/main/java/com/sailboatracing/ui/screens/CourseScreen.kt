@@ -1,5 +1,11 @@
 package com.sailboatracing.ui.screens
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint
+import android.graphics.Path as AndroidPath
+import android.graphics.drawable.BitmapDrawable
 import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,16 +79,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sailboatracing.model.LatLng
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.Rounding
+import com.sailboatracing.model.SensorData
 import com.sailboatracing.model.StartLine
 import com.sailboatracing.ui.theme.PrimaryColor
 import com.sailboatracing.viewmodel.RaceViewModel
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.Polyline
 
 @Composable
 fun CourseScreen(viewModel: RaceViewModel) {
@@ -181,6 +193,10 @@ private fun StartLineTab(
             currentGpsPosition = state.latestData?.let { d ->
                 if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
             },
+            latestData = state.latestData,
+            marks = state.marks,
+            historicalCogDeg = state.historicalCogDeg,
+            showHeadingLines = state.showHeadingLines,
             onMark = { viewModel.markStartLinePin() },
             onMarkAt = { lat, lon -> viewModel.markStartLinePinAt(lat, lon) }
         )
@@ -195,6 +211,10 @@ private fun StartLineTab(
             currentGpsPosition = state.latestData?.let { d ->
                 if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
             },
+            latestData = state.latestData,
+            marks = state.marks,
+            historicalCogDeg = state.historicalCogDeg,
+            showHeadingLines = state.showHeadingLines,
             onMark = { viewModel.markStartLineBoat() },
             onMarkAt = { lat, lon -> viewModel.markStartLineBoatAt(lat, lon) }
         )
@@ -228,6 +248,10 @@ private fun StartLinePointRow(
     hasRecentGpsFix: Boolean,
     enabled: Boolean = true,
     currentGpsPosition: LatLng?,
+    latestData: SensorData? = null,
+    marks: List<RaceMark> = emptyList(),
+    historicalCogDeg: Float? = null,
+    showHeadingLines: Boolean = true,
     onMark: () -> Unit,
     onMarkAt: (Double, Double) -> Unit
 ) {
@@ -296,6 +320,10 @@ private fun StartLinePointRow(
         MapPickerDialog(
             initialCenter = currentGpsPosition,
             existingPosition = position,
+            latestData = latestData,
+            marks = marks,
+            historicalCogDeg = historicalCogDeg,
+            showHeadingLines = showHeadingLines,
             onDismiss = { showMapPicker = false },
             onConfirm = { pos ->
                 onMarkAt(pos.latitude, pos.longitude)
@@ -471,6 +499,10 @@ private fun MarksTab(
             defaultName = "m${state.marks.size + 1}",
             hasRecentGpsFix = hasRecentGpsFix,
             currentGpsPosition = currentGpsPosition,
+            latestData = state.latestData,
+            marks = state.marks,
+            historicalCogDeg = state.historicalCogDeg,
+            showHeadingLines = state.showHeadingLines,
             onDismiss = { showAddMarkDialog = false },
             onAdd = { name, position, rounding, isGate, gateEnd ->
                 viewModel.addMarkAt(name, position.latitude, position.longitude, rounding, isGate, gateEnd)
@@ -484,6 +516,10 @@ private fun MarksTab(
             mark = mark,
             hasRecentGpsFix = hasRecentGpsFix,
             currentGpsPosition = currentGpsPosition,
+            latestData = state.latestData,
+            marks = state.marks,
+            historicalCogDeg = state.historicalCogDeg,
+            showHeadingLines = state.showHeadingLines,
             onDismiss = { editingMark = null },
             onSave = { name, position, rounding, isGate, gateEnd ->
                 viewModel.editMark(mark.id, name, rounding, position, isGate, gateEnd)
@@ -696,6 +732,10 @@ private fun AddMarkDialog(
     defaultName: String = "",
     hasRecentGpsFix: Boolean,
     currentGpsPosition: LatLng?,
+    latestData: SensorData? = null,
+    marks: List<RaceMark> = emptyList(),
+    historicalCogDeg: Float? = null,
+    showHeadingLines: Boolean = true,
     onDismiss: () -> Unit,
     onAdd: (name: String, position: LatLng, rounding: Rounding, isGate: Boolean, gateEnd: LatLng?) -> Unit
 ) {
@@ -876,6 +916,10 @@ private fun AddMarkDialog(
         MapPickerDialog(
             initialCenter = currentGpsPosition,
             existingPosition = pickedPosition,
+            latestData = latestData,
+            marks = marks,
+            historicalCogDeg = historicalCogDeg,
+            showHeadingLines = showHeadingLines,
             onDismiss = { showMapPickerA = false },
             onConfirm = { pos -> pickedPosition = pos; showMapPickerA = false }
         )
@@ -884,6 +928,10 @@ private fun AddMarkDialog(
         MapPickerDialog(
             initialCenter = pickedPosition ?: currentGpsPosition,
             existingPosition = pickedGateEnd,
+            latestData = latestData,
+            marks = marks,
+            historicalCogDeg = historicalCogDeg,
+            showHeadingLines = showHeadingLines,
             onDismiss = { showMapPickerB = false },
             onConfirm = { pos -> pickedGateEnd = pos; showMapPickerB = false }
         )
@@ -897,6 +945,10 @@ private fun EditMarkDialog(
     mark: RaceMark,
     hasRecentGpsFix: Boolean,
     currentGpsPosition: LatLng?,
+    latestData: SensorData? = null,
+    marks: List<RaceMark> = emptyList(),
+    historicalCogDeg: Float? = null,
+    showHeadingLines: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (name: String, position: LatLng, rounding: Rounding, isGate: Boolean, gateEnd: LatLng?) -> Unit
 ) {
@@ -1069,6 +1121,10 @@ private fun EditMarkDialog(
         MapPickerDialog(
             initialCenter = displayPosition,
             existingPosition = displayPosition,
+            latestData = latestData,
+            marks = marks,
+            historicalCogDeg = historicalCogDeg,
+            showHeadingLines = showHeadingLines,
             onDismiss = { showMapPickerA = false },
             onConfirm = { pos -> pickedPosition = pos; showMapPickerA = false }
         )
@@ -1077,10 +1133,47 @@ private fun EditMarkDialog(
         MapPickerDialog(
             initialCenter = pickedGateEnd ?: displayPosition,
             existingPosition = pickedGateEnd,
+            latestData = latestData,
+            marks = marks,
+            historicalCogDeg = historicalCogDeg,
+            showHeadingLines = showHeadingLines,
             onDismiss = { showMapPickerB = false },
             onConfirm = { pos -> pickedGateEnd = pos; showMapPickerB = false }
         )
     }
+}
+
+// ─────────────────────────── GEO UTILITIES ───────────────────────────
+
+private fun projectGeoPoint(lat: Double, lon: Double, bearingDeg: Double, distanceM: Double): GeoPoint {
+    val r = 6371000.0
+    val d = distanceM / r
+    val b = Math.toRadians(bearingDeg)
+    val lat1 = Math.toRadians(lat)
+    val lon1 = Math.toRadians(lon)
+    val lat2 = asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(b))
+    val lon2 = lon1 + atan2(sin(b) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2))
+    return GeoPoint(Math.toDegrees(lat2), Math.toDegrees(lon2))
+}
+
+private fun boatBitmapDrawable(context: Context, headingDeg: Float): BitmapDrawable {
+    val dp = context.resources.displayMetrics.density
+    val size = (20 * dp).toInt()
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val cv = AndroidCanvas(bmp)
+    cv.rotate(headingDeg, size / 2f, size / 2f)
+    val w = size.toFloat(); val h = size.toFloat()
+    cv.drawPath(AndroidPath().apply {
+        moveTo(w * 0.50f, h * 0.02f); lineTo(w * 0.86f, h * 0.92f)
+        lineTo(w * 0.50f, h * 0.65f); lineTo(w * 0.14f, h * 0.92f); close()
+    }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; style = Paint.Style.FILL })
+    cv.drawPath(AndroidPath().apply {
+        moveTo(w * 0.50f, h * 0.10f); lineTo(w * 0.79f, h * 0.88f)
+        lineTo(w * 0.50f, h * 0.65f); lineTo(w * 0.21f, h * 0.88f); close()
+    }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#FF8C00"); style = Paint.Style.FILL
+    })
+    return BitmapDrawable(context.resources, bmp)
 }
 
 // ──────────────────────── COPY START LINE DIALOG ─────────────────────
@@ -1138,6 +1231,10 @@ private fun CopyStartLineDialog(
 private fun MapPickerDialog(
     initialCenter: LatLng?,
     existingPosition: LatLng?,
+    latestData: SensorData? = null,
+    marks: List<RaceMark> = emptyList(),
+    historicalCogDeg: Float? = null,
+    showHeadingLines: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (LatLng) -> Unit
 ) {
@@ -1146,6 +1243,19 @@ private fun MapPickerDialog(
     val selectedGeoPoint = remember { mutableStateOf<GeoPoint?>(null) }
 
     Configuration.getInstance().userAgentValue = context.packageName
+
+    // Tap overlay is stable — stored outside mapView so we can re-add it in the update lambda
+    val tapOverlay = remember {
+        object : Overlay() {
+            override fun onSingleTapConfirmed(e: MotionEvent, mv: MapView): Boolean {
+                val proj = mv.projection
+                val gp = proj.fromPixels(e.x.toInt(), e.y.toInt())
+                selectedGeoPoint.value = GeoPoint(gp.latitude, gp.longitude)
+                // recomposition triggered by selectedGeoPoint change → update lambda redraws all overlays
+                return true
+            }
+        }
+    }
 
     val mapView = remember {
         MapView(context).apply {
@@ -1156,31 +1266,10 @@ private fun MapPickerDialog(
             center?.let { controller.setCenter(GeoPoint(it.latitude, it.longitude)) }
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
-
             existingPosition?.let { pos ->
-                val startGeo = GeoPoint(pos.latitude, pos.longitude)
-                selectedGeoPoint.value = startGeo
-                overlays.add(Marker(this).apply {
-                    position = startGeo
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                })
+                selectedGeoPoint.value = GeoPoint(pos.latitude, pos.longitude)
             }
-
-            overlays.add(object : Overlay() {
-                override fun onSingleTapConfirmed(e: MotionEvent, mv: MapView): Boolean {
-                    val proj = mv.projection
-                    val gp = proj.fromPixels(e.x.toInt(), e.y.toInt())
-                    val tapped = GeoPoint(gp.latitude, gp.longitude)
-                    selectedGeoPoint.value = tapped
-                    mv.overlays.removeAll { it is Marker }
-                    mv.overlays.add(Marker(mv).apply {
-                        position = tapped
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    })
-                    mv.invalidate()
-                    return true
-                }
-            })
+            overlays.add(tapOverlay)
         }
     }
 
@@ -1221,7 +1310,79 @@ private fun MapPickerDialog(
 
                 AndroidView(
                     factory = { mapView },
-                    update = { /* tap overlay handles state */ },
+                    update = { mv ->
+                        mv.overlays.clear()
+
+                        // Boat position + heading lines
+                        val boatLat = latestData?.lat
+                        val boatLon = latestData?.lon
+                        if (boatLat != null && boatLon != null && (boatLat != 0.0 || boatLon != 0.0)) {
+                            val boatGeo = GeoPoint(boatLat, boatLon)
+                            if (showHeadingLines) {
+                                if ((latestData.imuAccuracy) >= 1) {
+                                    val hdgEnd = projectGeoPoint(boatLat, boatLon, latestData.heading.toDouble(), 1000.0)
+                                    mv.overlays.add(Polyline(mv).apply {
+                                        setPoints(listOf(boatGeo, hdgEnd))
+                                        outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
+                                        outlinePaint.strokeWidth = 3f
+                                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                                    })
+                                }
+                                val cogDeg = historicalCogDeg ?: latestData.cogDeg
+                                if (latestData.fixType >= 2 && latestData.sogKts >= 0.3f) {
+                                    val cogEnd = projectGeoPoint(boatLat, boatLon, cogDeg.toDouble(), 1000.0)
+                                    mv.overlays.add(Polyline(mv).apply {
+                                        setPoints(listOf(boatGeo, cogEnd))
+                                        outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)
+                                        outlinePaint.strokeWidth = 3f
+                                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                                    })
+                                }
+                            }
+                            mv.overlays.add(Marker(mv).apply {
+                                position = boatGeo
+                                title = ""
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                icon = boatBitmapDrawable(mv.context, latestData.heading)
+                                setOnMarkerClickListener { _, _ -> false }
+                            })
+                        }
+
+                        // Existing marks
+                        for (mark in marks) {
+                            val markGeo = GeoPoint(mark.position.latitude, mark.position.longitude)
+                            mv.overlays.add(Marker(mv).apply {
+                                position = markGeo
+                                title = mark.name
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            })
+                            if (mark.isGate && mark.gateEnd != null) {
+                                val gateEndGeo = GeoPoint(mark.gateEnd.latitude, mark.gateEnd.longitude)
+                                mv.overlays.add(Marker(mv).apply {
+                                    position = gateEndGeo
+                                    title = "${mark.name}B"
+                                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                })
+                                mv.overlays.add(Polyline(mv).apply {
+                                    setPoints(listOf(markGeo, gateEndGeo))
+                                    outlinePaint.color = android.graphics.Color.argb(180, 255, 171, 64)
+                                    outlinePaint.strokeWidth = 2f
+                                })
+                            }
+                        }
+
+                        // User-selected position marker (on top of marks)
+                        selectedGeoPoint.value?.let { gp ->
+                            mv.overlays.add(Marker(mv).apply {
+                                position = gp
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            })
+                        }
+
+                        // Tap overlay must be last so it intercepts touch before markers
+                        mv.overlays.add(tapOverlay)
+                        mv.invalidate()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(320.dp)

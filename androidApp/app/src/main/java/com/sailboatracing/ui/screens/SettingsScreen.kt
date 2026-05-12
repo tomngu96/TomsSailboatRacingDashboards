@@ -158,11 +158,14 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "Send RTCM corrections", color = Color.White, fontSize = 14.sp)
+                        val selectedCaster = state.ntripCasters.find { it.id == state.ntripSelectedCasterId }
                         val statusText = when {
                             !state.ntripEnabled -> "Disabled"
                             state.ntripConnected -> "Connected — corrections flowing"
+                            state.connected && selectedCaster?.mountpoint.isNullOrBlank() && state.ntripAutoMountpoint.isEmpty() ->
+                                "Resolving nearest mountpoint…"
                             state.connected -> "Enabled — connecting…"
-                            else -> "Enabled — waiting for Bluetooth"
+                            else -> "Enabled — starts automatically on Bluetooth connect"
                         }
                         val statusColor = when {
                             state.ntripConnected -> Color(0xFF4CAF50)
@@ -204,43 +207,97 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                         border = BorderStroke(1.dp, borderColor),
                         onClick = { viewModel.selectNtripCaster(caster.id) }
                     ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = caster.name,
-                                    color = if (isSelected) Color(0xFF4CAF50) else Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = "${caster.host}:${caster.port}",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                                if (caster.mountpoint.isNotBlank()) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            // Top row: name / host / edit / remove
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "/${caster.mountpoint}",
-                                        color = Color(0xFF666666),
+                                        text = caster.name,
+                                        color = if (isSelected) Color(0xFF4CAF50) else Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${caster.host}:${caster.port}",
+                                        color = Color(0xFF888888),
                                         fontSize = 11.sp
                                     )
-                                } else {
-                                    Text(
-                                        text = "No mountpoint set",
-                                        color = Color(0xFF884444),
-                                        fontSize = 11.sp
-                                    )
+                                    if (caster.mountpoint.isNotBlank()) {
+                                        Text(
+                                            text = "/${caster.mountpoint}",
+                                            color = Color(0xFF666666),
+                                            fontSize = 11.sp
+                                        )
+                                    } else {
+                                        val autoLabel = if (isSelected && state.ntripAutoMountpoint.isNotBlank() && state.ntripNearbyMountpoints.isEmpty())
+                                            "Auto: /${state.ntripAutoMountpoint}"
+                                        else if (!isSelected || state.ntripNearbyMountpoints.isEmpty())
+                                            "Auto-select nearest"
+                                        else null
+                                        if (autoLabel != null) {
+                                            Text(
+                                                text = autoLabel,
+                                                color = if (isSelected && state.ntripAutoMountpoint.isNotBlank())
+                                                    Color(0xFF4CAF50) else Color(0xFF888888),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+                                TextButton(onClick = { ntripEditCaster = caster }) {
+                                    Text("EDIT", fontSize = 11.sp, color = Color(0xFF888888))
+                                }
+                                if (state.ntripCasters.size > 1) {
+                                    TextButton(onClick = { viewModel.removeNtripCaster(caster.id) }) {
+                                        Text("✕", fontSize = 13.sp, color = Color(0xFF664444))
+                                    }
                                 }
                             }
-                            TextButton(onClick = { ntripEditCaster = caster }) {
-                                Text("EDIT", fontSize = 11.sp, color = Color(0xFF888888))
-                            }
-                            if (state.ntripCasters.size > 1) {
-                                TextButton(onClick = { viewModel.removeNtripCaster(caster.id) }) {
-                                    Text("✕", fontSize = 13.sp, color = Color(0xFF664444))
+
+                            // Auto-selector row — only when ranked list is available
+                            if (caster.mountpoint.isBlank() && isSelected && state.ntripNearbyMountpoints.isNotEmpty()) {
+                                val idx = state.ntripAutoMountpointIndex
+                                val total = state.ntripNearbyMountpoints.size
+                                val mountName = state.ntripNearbyMountpoints.getOrElse(idx) { "" }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                    color = Color(0xFF2A2A2A)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    TextButton(
+                                        onClick = { viewModel.ntripSelectMountpointIndex(idx - 1) },
+                                        enabled = idx > 0
+                                    ) {
+                                        Text("‹", fontSize = 18.sp,
+                                            color = if (idx > 0) Color(0xFF4CAF50) else Color(0xFF333333))
+                                    }
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = "/$mountName",
+                                            color = Color(0xFF4CAF50),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${idx + 1} of $total nearby stations",
+                                            color = Color(0xFF666666),
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { viewModel.ntripSelectMountpointIndex(idx + 1) },
+                                        enabled = idx < total - 1
+                                    ) {
+                                        Text("›", fontSize = 18.sp,
+                                            color = if (idx < total - 1) Color(0xFF4CAF50) else Color(0xFF333333))
+                                    }
                                 }
                             }
                         }
@@ -256,9 +313,10 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                 }
 
                 Text(
-                    text = "Pick the caster with best coverage near your race area. " +
-                        "Mountpoint must be within ~30–50 km for good corrections. " +
-                        "RTK2go requires registration (email = username). Centipede is open.",
+                    text = "Mountpoint must be within ~30–50 km for good corrections. " +
+                        "Leave mountpoint blank to automatically pick the nearest live station. " +
+                        "RTK2go: username \"rtk2go\", password \"none\" — no registration needed. " +
+                        "Centipede is open with no credentials required.",
                     color = Color(0xFF555555),
                     fontSize = 11.sp,
                     lineHeight = 16.sp
@@ -560,6 +618,43 @@ fun SettingsScreen(viewModel: RaceViewModel) {
 
         HorizontalDivider(color = Color(0xFF222222))
 
+        // ── Session Recording ──────────────────────────────────────────
+        SectionHeader("SESSION RECORDING")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(text = "Max recording duration", color = Color(0xFF888888), fontSize = 13.sp)
+                SliderWithInput(
+                    value = state.maxRecordingHours,
+                    onValueChange = { viewModel.setMaxRecordingHours(it) },
+                    valueRange = 1f..24f,
+                    steps = 22,
+                    unit = "h",
+                    accentColor = Color(0xFFFF4444)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "1h", color = Color(0xFF666666), fontSize = 11.sp)
+                    Text(text = "24h", color = Color(0xFF666666), fontSize = 11.sp)
+                }
+                Text(
+                    text = "Recording stops automatically after this duration. " +
+                        "Files are saved to Android/data/com.sailboatracing/files/sessions/ " +
+                        "and accessible via USB.",
+                    color = Color(0xFF666666),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF222222))
+
         // ── Timer ──────────────────────────────────────────────────────
         SectionHeader("TIMER")
         Card(
@@ -666,6 +761,43 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                         )
                     }
                 }
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF222222))
+
+        // ── Map Heading Lines ──────────────────────────────────────────
+        SectionHeader("MAP HEADING LINES")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Show heading & COG lines", color = Color.White, fontSize = 14.sp)
+                    Switch(
+                        checked = state.showHeadingLines,
+                        onCheckedChange = { viewModel.setShowHeadingLines(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = PrimaryColor,
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF333333)
+                        )
+                    )
+                }
+                Text(
+                    text = "Draws a green line in the heading direction (bow) and a red line in the COG direction on the map. " +
+                        "Both project 300 m ahead. COG line only appears when moving.",
+                    color = Color(0xFF666666),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
             }
         }
 
@@ -845,7 +977,7 @@ private fun NtripCasterDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = fieldColors, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = mountpoint, onValueChange = { mountpoint = it },
-                    label = { Text("Mountpoint", color = Color(0xFF666666), fontSize = 12.sp) },
+                    label = { Text("Mountpoint (blank = auto-select nearest)", color = Color(0xFF666666), fontSize = 12.sp) },
                     singleLine = true, colors = fieldColors, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = username, onValueChange = { username = it },
                     label = { Text("Username", color = Color(0xFF666666), fontSize = 12.sp) },
