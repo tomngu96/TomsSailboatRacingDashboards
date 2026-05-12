@@ -98,8 +98,8 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             .fillMaxSize()
             .background(Color(0xFF0A0A0F))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         StatusBar(
             connected = state.connected,
@@ -133,14 +133,15 @@ fun DashboardScreen(viewModel: RaceViewModel) {
                     text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
                     fontSize = 80.sp,
                     fontWeight = FontWeight.Black,
-                    color = Color.White
+                    color = Color.White,
+                    lineHeight = 70.sp
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "kts",
                     fontSize = 20.sp,
                     color = Color(0xFF888888),
-                    modifier = Modifier.padding(bottom = 14.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
             // Heel — pinned to right edge, never affects speed position
@@ -208,7 +209,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
                 historicalCogDeg = state.historicalCogDeg,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(280.dp)
+                    .height(350.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
         }
@@ -308,8 +309,8 @@ private fun CourseInfoCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (hasStartLine && pageIndex == 0 && startLineStatus != null) {
                 // ── Start line page ──
@@ -912,7 +913,9 @@ private fun StatusBar(
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -959,7 +962,7 @@ private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?, imuAccuracy: I
     )
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(vertical = 0.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left: Arrow pinned to far left, followed by HDG
@@ -1060,7 +1063,7 @@ private fun HeadedLiftedBanner(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 5.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
