@@ -115,8 +115,8 @@ float    imu_az       = 0.0f;
 uint8_t  imu_accuracy = 0;      // 0=unreliable … 3=high
 
 // ── GPS state (populated by readGPS tomorrow) ─────────────────────────────────
-float    gps_lat      = 0.0f;   // degrees
-float    gps_lon      = 0.0f;
+double   gps_lat      = 0.0;    // degrees — double required for 7-decimal resolution
+double   gps_lon      = 0.0;
 float    gps_sog_kts  = 0.0f;   // speed over ground, knots
 float    gps_cog_deg  = 0.0f;   // course over ground, degrees true
 uint8_t  gps_fixType  = 0;      // 0=none 2=2D 3=3D
@@ -212,7 +212,7 @@ void transmitPacket() {
   if (gps_active) {
     len = snprintf(body, sizeof(body),
       "SAL,%.1f,%.1f,%.1f,%.2f,%.3f,%.3f,%.3f,%u,"
-      "%.6f,%.6f,%.2f,%.1f,%u",
+      "%.7f,%.7f,%.2f,%.1f,%u",
       imu_hdg_deg, imu_pitch, imu_roll, imu_gyroZ,
       imu_ax, imu_ay, imu_az, imu_accuracy,
       gps_lat, gps_lon, gps_sog_kts, gps_cog_deg, gps_fixType);
@@ -271,8 +271,8 @@ bool readGPS() {
   // if (!gps.getPVT()) return false;            // no new data yet this cycle
   //
   // gps_fixType  = gps.getFixType();            // 0=none 2=2D 3=3D
-  // gps_lat      = gps.getLatitude()  / 1e7f;  // degrees
-  // gps_lon      = gps.getLongitude() / 1e7f;
+  // gps_lat      = gps.getLatitude()  / 1e7;   // degrees — 1e7 (double) preserves 7-decimal resolution
+  // gps_lon      = gps.getLongitude() / 1e7;
   //
   // float sog_mmps = (float)gps.getGroundSpeed(); // mm/s
   // gps_sog_kts    = sog_mmps * 0.00194384f;       // → knots

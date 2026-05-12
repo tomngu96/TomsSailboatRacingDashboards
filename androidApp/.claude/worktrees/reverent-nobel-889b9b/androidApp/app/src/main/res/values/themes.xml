@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SailboatRacing" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">#0A0A0F</item>
+        <item name="android:statusBarColor">#0A0A0F</item>
+        <item name="android:navigationBarColor">#14141E</item>
+        <item name="colorPrimary">#00C8FF</item>
+        <item name="colorPrimaryDark">#0A0A0F</item>
+        <item name="colorAccent">#00C8FF</item>
+    </style>
+</resources>

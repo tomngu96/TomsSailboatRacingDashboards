@@ -167,7 +167,7 @@ private fun LineChartView(
     } ?: latestY
     val valueText = when (chartType) {
         ChartType.HEADING -> "%.1f°".format(shownValue)
-        else              -> "%.2f kts".format(shownValue)
+        else              -> "%.1f kts".format(shownValue)
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -304,7 +304,7 @@ fun DirectionRoseChart(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("SOG", fontSize = 10.sp, color = Color(0xFFFFAB40))
                     Text(
-                        text = "%.2f kts".format(currentSog),
+                        text = "%.1f kts".format(currentSog),
                         fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFAB40)
                     )
                 }
@@ -497,7 +497,7 @@ internal fun AllChartsQuadrant(history: List<SensorData>, modifier: Modifier = M
         ) {
             QuadrantCell(
                 label = "SPEED",
-                value = if (latest != null) "%.2f kts".format(latest.sogKts) else null,
+                value = if (latest != null) "%.1f kts".format(latest.sogKts) else null,
                 valueColor = Color(0xFF00C8FF),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             ) {
@@ -518,7 +518,7 @@ internal fun AllChartsQuadrant(history: List<SensorData>, modifier: Modifier = M
         ) {
             QuadrantCell(
                 label = "VMG",
-                value = if (latest != null) "%.2f kts".format(latest.sogKts) else null,
+                value = if (latest != null) "%.1f kts".format(latest.sogKts) else null,
                 valueColor = Color(0xFF00FF88),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             ) {

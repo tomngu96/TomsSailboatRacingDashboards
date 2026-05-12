@@ -122,7 +122,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             verticalAlignment = Alignment.Bottom
         ) {
             Text(
-                text = if (data != null) "%.2f".format(data.sogKts) else "--.--",
+                text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
                 fontSize = 80.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White
@@ -996,7 +996,7 @@ private fun DashboardInlineChart(history: List<SensorData>, chartType: Dashboard
     } ?: latestVal
     val valueText = when (chartType) {
         DashboardChartType.HEADING -> "%.1f°".format(displayVal)
-        else                       -> "%.2f kts".format(displayVal)
+        else                       -> "%.1f kts".format(displayVal)
     }
 
     Card(
