@@ -44,7 +44,8 @@ object PacketParser {
             val lon = if (fields.size > 9) fields[9].toDoubleOrNull() ?: 0.0 else 0.0
             val sogKts = if (fields.size > 10) fields[10].toFloatOrNull() ?: 0f else 0f
             val cog = if (fields.size > 11) fields[11].toFloatOrNull() ?: 0f else 0f
-            val fixType = if (fields.size > 12) fields[12].toIntOrNull() ?: 0 else 0
+            val fixType  = if (fields.size > 12) fields[12].toIntOrNull() ?: 0 else 0
+            val rtkStatus = if (fields.size > 13) fields[13].toIntOrNull() ?: 0 else 0
 
             SensorData(
                 timestampMs = System.currentTimeMillis(),
@@ -61,6 +62,7 @@ object PacketParser {
                 sogKts = sogKts,
                 cogDeg = cog,
                 fixType = fixType,
+                rtkStatus = rtkStatus,
                 isDirectGpsReading = fixType >= 2
             )
         } catch (e: Exception) {

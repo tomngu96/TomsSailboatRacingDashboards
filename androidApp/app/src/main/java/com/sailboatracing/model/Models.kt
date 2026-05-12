@@ -2,6 +2,23 @@ package com.sailboatracing.model
 
 data class LatLng(val latitude: Double, val longitude: Double)
 
+data class NtripCaster(
+    val id: Int,
+    val name: String,
+    val host: String,
+    val port: Int = 2101,
+    val mountpoint: String = "",
+    val username: String = "",
+    val password: String = ""
+) {
+    companion object {
+        val DEFAULTS = listOf(
+            NtripCaster(id = 0, name = "RTK2go", host = "rtk2go.com", port = 2101),
+            NtripCaster(id = 1, name = "Centipede", host = "caster.centipede.fr", port = 2101)
+        )
+    }
+}
+
 data class SensorData(
     val timestampMs: Long,
     val heading: Float,
@@ -17,6 +34,8 @@ data class SensorData(
     val sogKts: Float,
     val cogDeg: Float,
     val fixType: Int,
+    // RTK carrier solution type (F9P only): 0=none, 1=float (~10-30 cm), 2=fixed (~1-2 cm)
+    val rtkStatus: Int = 0,
     // True only when this packet carries freshly-received GPS data (not carried over from IMU injection).
     // Used to update lastGpsFixMs without counting IMU-only frames as a GPS heartbeat.
     val isDirectGpsReading: Boolean = false
@@ -107,5 +126,10 @@ data class RaceState(
     // Observed COG averaged over the last cogWindowSeconds (circular mean of GPS COG readings)
     val cogWindowSeconds: Int = 1,
     val historicalCogDeg: Float? = null,
-    val dashboardCharts: Set<DashboardChartType> = emptySet()
+    val dashboardCharts: Set<DashboardChartType> = emptySet(),
+    // NTRIP — settings persisted, ntripConnected is runtime status only
+    val ntripEnabled: Boolean = false,
+    val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
+    val ntripSelectedCasterId: Int = 0,
+    val ntripConnected: Boolean = false
 )

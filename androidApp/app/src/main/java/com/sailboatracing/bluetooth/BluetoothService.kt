@@ -115,6 +115,13 @@ class BluetoothService(private val context: Context) {
         }
     }
 
+    fun sendBytes(bytes: ByteArray) {
+        try {
+            socket?.outputStream?.write(bytes)
+            socket?.outputStream?.flush()
+        } catch (_: IOException) {}
+    }
+
     fun disconnect() {
         readJob?.cancel()
         readJob = null

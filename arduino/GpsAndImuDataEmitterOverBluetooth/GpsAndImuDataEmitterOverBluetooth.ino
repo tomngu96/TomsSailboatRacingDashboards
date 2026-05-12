@@ -4,21 +4,40 @@
  * Supports two hardware configurations selected automatically at compile time:
  *
  *   TEENSY (4.x) + HC-05
- *     BNO080/085  I2C       SDA=18,  SCL=19
- *                           PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
- *     HC-05       Serial1   TX=1,    RX=0
- *                           PWR: 5 V — use USB VBUS pin, NOT Teensy 3V3 (not enough current)
- *                           GND → GND
- *                           Must be reconfigured to 115200 baud via AT commands (see below)
- *     GPS-15712   Serial2   TX=8,    RX=7
- *                           PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
+ *     BNO080/085       I2C      SDA=18, SCL=19
+ *                               PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
+ *     HC-05            Serial1  TX=1,   RX=0
+ *                               PWR: 5 V — use USB VBUS pin, NOT Teensy 3V3 (not enough current)
+ *                               GND → GND
+ *                               Must be reconfigured to 115200 baud via AT commands (see below)
+ *
+ *     GPS option A — ZED-F9P / NEO-D9S combo (UART)     [GPS_MODULE_F9P]
+ *       Use the UART1 pins on the board directly — do NOT use the Qwiic connector.
+ *       Qwiic (I2C) is too slow for 20 Hz RTK data; UART gives the throughput needed.
+ *       Serial2  F9P-TX → Teensy pin 7 (RX),  F9P-RX → Teensy pin 8 (TX)
+ *       PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
+ *       Baud: 115200 (set via GPS_BAUD below — F9P default is 38400, library auto-detects)
+ *
+ *     GPS option B — NEO-M9N (GPS-15712, UART)          [GPS_MODULE_M9N]
+ *       Serial2  GPS-TX → Teensy pin 7 (RX),  GPS-RX → Teensy pin 8 (TX)
+ *       PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
+ *       Baud: 9600 default
  *
  *   ESP32
- *     BNO080/085  I2C       SDA=21,  SCL=22
- *                           PWR: 3.3 V (ESP32 3V3 pin),   GND → GND
- *     Bluetooth             built-in, no extra hardware needed
- *     GPS-15712   Serial2   RX=16,   TX=17
- *                           PWR: 3.3 V (ESP32 3V3 pin),   GND → GND
+ *     BNO080/085       I2C      SDA=21, SCL=22
+ *                               PWR: 3.3 V (ESP32 3V3 pin),   GND → GND
+ *     Bluetooth                 built-in, no extra hardware needed
+ *
+ *     GPS option A — ZED-F9P / NEO-D9S combo (UART)     [GPS_MODULE_F9P]
+ *       Use the UART1 pins on the board directly — do NOT use the Qwiic connector.
+ *       Serial2  F9P-TX → ESP32 pin 16 (RX),  F9P-RX → ESP32 pin 17 (TX)
+ *       PWR: 3.3 V (ESP32 3V3 pin),  GND → GND
+ *       Baud: 115200
+ *
+ *     GPS option B — NEO-M9N (GPS-15712, UART)          [GPS_MODULE_M9N]
+ *       Serial2  GPS-TX → ESP32 pin 16 (RX),  GPS-RX → ESP32 pin 17 (TX)
+ *       PWR: 3.3 V (ESP32 3V3 pin),  GND → GND
+ *       Baud: 9600 default
  *
  * HC-05 AT-command setup (Teensy only):
  *   1. Flash hc05_passthrough.ino to Teensy.
@@ -35,9 +54,11 @@
  *
  * Packet format (25 Hz, \r\n terminated):
  *   Without GPS:  $SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAcc*XX
- *   With GPS:     $SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAcc,lat,lon,sog,cog,fix*XX
+ *   With GPS:     $SAL,hdg,pitch,roll,gyroZ,ax,ay,az,imuAcc,lat,lon,sog,cog,fix,rtk*XX
  *
  *   lat/lon: 7 decimal places (double) — ~1 cm resolution for smooth 25 Hz motion math
+ *   fix:     u-blox fixType  0=none 2=2D 3=3D
+ *   rtk:     carrier solution 0=none 1=float(~10-30 cm) 2=fixed(~1-2 cm) — always 0 on M9N
  */
 
 #include <Wire.h>
@@ -63,9 +84,25 @@
   #define GPS_TX_PIN 8
 #endif
 
+// ── GPS module selection ──────────────────────────────────────────────────────
+// Uncomment ONE. M9N tops out at 25 Hz; F9P at 20 Hz but supports RTK centimeter accuracy.
+// F9P accepts RTCM3 correction bytes forwarded from the phone via Bluetooth.
+// #define GPS_MODULE_F9P
+#define GPS_MODULE_M9N
+
+#ifdef GPS_MODULE_F9P
+  #define GPS_NAV_HZ 20
+#else
+  #define GPS_NAV_HZ 25
+#endif
+
 // ── GPS serial port ──────────────────────────────────────────────────────────
 #define GPS_SERIAL Serial2
-#define GPS_BAUD   9600    // u-blox default
+#ifdef GPS_MODULE_F9P
+  #define GPS_BAUD 115200  // F9P handles 20 Hz RTK comfortably at 115200
+#else
+  #define GPS_BAUD 9600    // M9N default
+#endif
 
 // ── IMU mounting ─────────────────────────────────────────────────────────────
 // Set true when the BNO080 is mounted flat with chip facing UP (Z-axis = up, ENU).
@@ -92,6 +129,7 @@ double   gps_lon      = 0.0;
 float    gps_sog_kts  = 0.0f;   // speed over ground, knots
 float    gps_cog_deg  = 0.0f;   // course over ground, degrees true
 uint8_t  gps_fixType  = 0;      // 0=none 2=2D 3=3D
+uint8_t  gps_rtkStatus = 0;    // 0=none 1=float 2=fixed (F9P only, always 0 on M9N)
 bool     gps_active   = false;
 
 // ── Forward declarations ──────────────────────────────────────────────────────
@@ -138,6 +176,14 @@ void loop() {
   if (gps_active ? newGPS : newIMU) {
     transmitPacket();
   }
+
+  // Forward any RTCM correction bytes arriving from the phone → GPS module.
+  // Only when GPS is active (serial port initialised). Safe to call every loop.
+  if (gps_active) {
+    while (BT_SERIAL.available()) {
+      GPS_SERIAL.write(BT_SERIAL.read());
+    }
+  }
 }
 
 // =============================================================================
@@ -178,10 +224,10 @@ void transmitPacket() {
   if (gps_active) {
     len = snprintf(body, sizeof(body),
       "SAL,%.1f,%.1f,%.1f,%.2f,%.3f,%.3f,%.3f,%u,"
-      "%.7f,%.7f,%.2f,%.1f,%u",
+      "%.7f,%.7f,%.2f,%.1f,%u,%u",
       imu_hdg_deg, imu_pitch, imu_roll, imu_gyroZ,
       imu_ax, imu_ay, imu_az, imu_accuracy,
-      gps_lat, gps_lon, gps_sog_kts, gps_cog_deg, gps_fixType);
+      gps_lat, gps_lon, gps_sog_kts, gps_cog_deg, gps_fixType, gps_rtkStatus);
   } else {
     len = snprintf(body, sizeof(body),
       "SAL,%.1f,%.1f,%.1f,%.2f,%.3f,%.3f,%.3f,%u",
@@ -218,27 +264,41 @@ bool readGPS() {
   // static bool gpsInit = false;
   // if (!gpsInit) {
   //
-  // #ifdef ARDUINO_ARCH_ESP32
-  //   GPS_SERIAL.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-  // #else
-  //   GPS_SERIAL.begin(GPS_BAUD);
-  // #endif
+  //   // Both modules use UART (Serial2). F9P runs at 115200; M9N at 9600.
+  //   // Do NOT use the Qwiic connector for the F9P — I2C is too slow for 20 Hz RTK.
+  //   #ifdef ARDUINO_ARCH_ESP32
+  //     GPS_SERIAL.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  //   #else
+  //     GPS_SERIAL.begin(GPS_BAUD);
+  //   #endif
   //
-  //   if (!gps.begin(GPS_SERIAL)) {
-  //     Serial.println("GPS not found — check wiring.");
+  //   #ifdef GPS_MODULE_F9P
+  //   // F9P ships at 38400 by default. Tell the library what baud we want so it
+  //   // can auto-detect and then switch the module to 115200.
+  //   if (!gps.begin(GPS_SERIAL, GPS_BAUD)) {
+  //     Serial.println("ZED-F9P not found — check UART1 TX/RX wiring and 3.3 V power.");
   //     return false;
   //   }
+  //   gps.setSerialRate(GPS_BAUD);   // lock module to 115200
+  //   #else
+  //   if (!gps.begin(GPS_SERIAL)) {
+  //     Serial.println("NEO-M9N not found — check TX/RX wiring and 3.3 V power.");
+  //     return false;
+  //   }
+  //   #endif
+  //
   //   gps.setUART1Output(COM_TYPE_UBX);
-  //   gps.setNavigationFrequency(25);   // 25 Hz
+  //   gps.setNavigationFrequency(GPS_NAV_HZ);   // 20 Hz (F9P) or 25 Hz (M9N)
   //   gps.setAutoPVT(true);
   //   gpsInit    = true;
   //   gps_active = true;
-  //   Serial.println("GPS-15712 ready.");
+  //   Serial.println("GPS ready.");
   // }
   //
   // if (!gps.getPVT()) return false;
   //
-  // gps_fixType = gps.getFixType();
+  // gps_fixType   = gps.getFixType();
+  // gps_rtkStatus = gps.getCarrierSolutionType();  // 0=none 1=float 2=fixed (F9P only)
   // gps_lat     = gps.getLatitude()  / 1e7;   // int32 1e-7 deg → double degrees
   // gps_lon     = gps.getLongitude() / 1e7;
   //

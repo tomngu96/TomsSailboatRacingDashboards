@@ -104,6 +104,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             connected = state.connected,
             imuAccuracy = data?.imuAccuracy ?: 0,
             fixType = data?.fixType ?: 0,
+            rtkStatus = data?.rtkStatus ?: 0,
             phoneImuActive = state.phoneImuActive,
             phoneGpsActive = state.phoneGpsActive,
             gpsStale = state.gpsStale
@@ -730,6 +731,7 @@ private fun StatusBar(
     connected: Boolean,
     imuAccuracy: Int,
     fixType: Int,
+    rtkStatus: Int,
     phoneImuActive: Boolean,
     phoneGpsActive: Boolean,
     gpsStale: Boolean
@@ -745,6 +747,8 @@ private fun StatusBar(
         else           -> Color(0xFFFF4444)
     }
     val gpsText = when {
+        connected && rtkStatus == 2    -> "RTK FIXED"
+        connected && rtkStatus == 1    -> "RTK FLOAT"
         connected && fixType == 3      -> "GPS 3D"
         connected && fixType == 2      -> "GPS 2D"
         connected                      -> "NO FIX"
@@ -753,6 +757,8 @@ private fun StatusBar(
         else                           -> "NO GPS"
     }
     val gpsColor = when {
+        connected && rtkStatus == 2    -> Color(0xFF00CFFF)  // cyan — centimeter accuracy
+        connected && rtkStatus == 1    -> Color(0xFF88AAFF)  // blue-ish — float, ~10-30 cm
         connected && fixType == 3      -> Color(0xFF00FF88)
         connected && fixType == 2      -> Color(0xFFFFAB40)
         gpsStale                       -> Color(0xFFFF8800)

@@ -8,7 +8,9 @@ import com.sailboatracing.algorithm.HeadedLiftedDetector
 import com.sailboatracing.algorithm.StartLineCalculator
 import com.sailboatracing.algorithm.VMGCalculator
 import com.sailboatracing.bluetooth.BluetoothService
+import com.sailboatracing.bluetooth.NtripClient
 import com.sailboatracing.bluetooth.PacketParser
+import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.location.PhoneGpsService
 import com.sailboatracing.location.PhoneImuService
 import com.sailboatracing.model.DashboardChartType
@@ -47,7 +49,9 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private var timerJob: Job? = null
     private var phoneGpsJob: Job? = null
     private var phoneImuJob: Job? = null
+    private var ntripJob: Job? = null
     var nextMarkId = 0
+    var nextCasterId = NtripCaster.DEFAULTS.size
 
     private var lastGoodHeading: Float? = null
     // Kept at 3 minutes regardless of the display historyWindowSeconds, so the headed/lifted
@@ -81,6 +85,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             bluetoothService.connected.collect { connected ->
                 _state.update { it.copy(connected = connected) }
+                if (connected) startNtripIfEnabled() else stopNtrip()
             }
         }
         // GPS staleness check — runs every second and marks GPS stale if no direct fix recently
@@ -108,6 +113,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             .coerceIn(0, (marks.size - 1).coerceAtLeast(0))
 
         nextMarkId = loadedNextId
+        nextCasterId = settings.ntripNextCasterId
 
         _state.update { current ->
             current.copy(
@@ -124,7 +130,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 usePhoneGps = settings.usePhoneGps,
                 usePhoneImu = settings.usePhoneImu,
                 cogWindowSeconds = settings.cogWindowSeconds,
-                dashboardCharts = settings.dashboardCharts
+                dashboardCharts = settings.dashboardCharts,
+                ntripEnabled = settings.ntripEnabled,
+                ntripCasters = settings.ntripCasters,
+                ntripSelectedCasterId = settings.ntripSelectedCasterId
             )
         }
 
@@ -155,7 +164,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             usePhoneGps = s.usePhoneGps,
             usePhoneImu = s.usePhoneImu,
             cogWindowSeconds = s.cogWindowSeconds,
-            dashboardCharts = s.dashboardCharts
+            dashboardCharts = s.dashboardCharts,
+            ntripEnabled = s.ntripEnabled,
+            ntripCasters = s.ntripCasters,
+            ntripSelectedCasterId = s.ntripSelectedCasterId,
+            ntripNextCasterId = nextCasterId
         )
     }
 
@@ -550,6 +563,85 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         if (enabled) startPhoneImu() else stopPhoneImu()
     }
 
+    fun setNtripEnabled(enabled: Boolean) {
+        _state.update { it.copy(ntripEnabled = enabled) }
+        saveSettings()
+        if (enabled && _state.value.connected) startNtripIfEnabled() else stopNtrip()
+    }
+
+    fun selectNtripCaster(id: Int) {
+        _state.update { it.copy(ntripSelectedCasterId = id) }
+        saveSettings()
+        if (_state.value.ntripEnabled && _state.value.connected) {
+            stopNtrip()
+            startNtripIfEnabled()
+        }
+    }
+
+    fun addNtripCaster(name: String, host: String, port: Int, mountpoint: String, username: String, password: String) {
+        val id = nextCasterId++
+        val caster = NtripCaster(id, name, host, port, mountpoint, username, password)
+        _state.update { it.copy(ntripCasters = it.ntripCasters + caster) }
+        saveSettings()
+    }
+
+    fun updateNtripCaster(caster: NtripCaster) {
+        _state.update { current ->
+            current.copy(ntripCasters = current.ntripCasters.map { if (it.id == caster.id) caster else it })
+        }
+        saveSettings()
+        if (_state.value.ntripEnabled && _state.value.connected && _state.value.ntripSelectedCasterId == caster.id) {
+            stopNtrip()
+            startNtripIfEnabled()
+        }
+    }
+
+    fun removeNtripCaster(id: Int) {
+        _state.update { current ->
+            val newList = current.ntripCasters.filter { it.id != id }
+            val newSelected = if (current.ntripSelectedCasterId == id)
+                newList.firstOrNull()?.id ?: 0
+            else current.ntripSelectedCasterId
+            current.copy(ntripCasters = newList, ntripSelectedCasterId = newSelected)
+        }
+        saveSettings()
+    }
+
+    private fun startNtripIfEnabled() {
+        val s = _state.value
+        if (!s.ntripEnabled) return
+        val caster = s.ntripCasters.find { it.id == s.ntripSelectedCasterId } ?: return
+        if (caster.host.isBlank() || caster.mountpoint.isBlank()) return
+        ntripJob?.cancel()
+        ntripJob = viewModelScope.launch {
+            _state.update { it.copy(ntripConnected = false) }
+            try {
+                NtripClient.stream(
+                    host = caster.host,
+                    port = caster.port,
+                    mountpoint = caster.mountpoint,
+                    username = caster.username,
+                    password = caster.password
+                ).collect { bytes ->
+                    if (_state.value.connected) {
+                        bluetoothService.sendBytes(bytes)
+                        if (!_state.value.ntripConnected) {
+                            _state.update { it.copy(ntripConnected = true) }
+                        }
+                    }
+                }
+            } finally {
+                _state.update { it.copy(ntripConnected = false) }
+            }
+        }
+    }
+
+    private fun stopNtrip() {
+        ntripJob?.cancel()
+        ntripJob = null
+        _state.update { it.copy(ntripConnected = false) }
+    }
+
     fun resetSettings() {
         val defaults = AppPreferences.Settings()
         _state.update { current ->
@@ -654,6 +746,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         tts = null
         stopPhoneGps()
         stopPhoneImu()
+        stopNtrip()
         bluetoothService.disconnect()
     }
 

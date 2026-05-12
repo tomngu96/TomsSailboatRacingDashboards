@@ -3,6 +3,7 @@ package com.sailboatracing.preferences
 import android.content.Context
 import com.sailboatracing.model.DashboardChartType
 import com.sailboatracing.model.LatLng
+import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.Rounding
 import com.sailboatracing.model.StartLine
@@ -26,6 +27,10 @@ object AppPreferences {
     private const val KEY_USE_PHONE_IMU = "use_phone_imu"
     private const val KEY_COG_WINDOW = "cog_window"
     private const val KEY_DASHBOARD_CHART = "dashboard_chart"
+    private const val KEY_NTRIP_ENABLED = "ntrip_enabled"
+    private const val KEY_NTRIP_CASTERS = "ntrip_casters"
+    private const val KEY_NTRIP_SELECTED_ID = "ntrip_selected_id"
+    private const val KEY_NTRIP_NEXT_ID = "ntrip_next_id"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -141,7 +146,11 @@ object AppPreferences {
         val usePhoneGps: Boolean = true,
         val usePhoneImu: Boolean = true,
         val cogWindowSeconds: Int = 1,
-        val dashboardCharts: Set<DashboardChartType> = emptySet()
+        val dashboardCharts: Set<DashboardChartType> = emptySet(),
+        val ntripEnabled: Boolean = false,
+        val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
+        val ntripSelectedCasterId: Int = 0,
+        val ntripNextCasterId: Int = NtripCaster.DEFAULTS.size
     )
 
     fun saveSettings(
@@ -156,8 +165,25 @@ object AppPreferences {
         usePhoneGps: Boolean,
         usePhoneImu: Boolean,
         cogWindowSeconds: Int,
-        dashboardCharts: Set<DashboardChartType>
+        dashboardCharts: Set<DashboardChartType>,
+        ntripEnabled: Boolean,
+        ntripCasters: List<NtripCaster>,
+        ntripSelectedCasterId: Int,
+        ntripNextCasterId: Int
     ) {
+        val castersJson = JSONArray().also { arr ->
+            ntripCasters.forEach { c ->
+                arr.put(JSONObject().apply {
+                    put("id", c.id)
+                    put("name", c.name)
+                    put("host", c.host)
+                    put("port", c.port)
+                    put("mountpoint", c.mountpoint)
+                    put("username", c.username)
+                    put("password", c.password)
+                })
+            }
+        }.toString()
         prefs(context).edit()
             .putInt(KEY_HISTORY_WINDOW, historyWindowSeconds)
             .putInt(KEY_HEADING_SHORT_WINDOW, headingShortWindowSec)
@@ -170,6 +196,10 @@ object AppPreferences {
             .putBoolean(KEY_USE_PHONE_IMU, usePhoneImu)
             .putInt(KEY_COG_WINDOW, cogWindowSeconds)
             .putString(KEY_DASHBOARD_CHART, dashboardCharts.joinToString(",") { it.name })
+            .putBoolean(KEY_NTRIP_ENABLED, ntripEnabled)
+            .putString(KEY_NTRIP_CASTERS, castersJson)
+            .putInt(KEY_NTRIP_SELECTED_ID, ntripSelectedCasterId)
+            .putInt(KEY_NTRIP_NEXT_ID, ntripNextCasterId)
             .apply()
     }
 
@@ -190,7 +220,28 @@ object AppPreferences {
                 ?.split(",")
                 ?.mapNotNull { runCatching { DashboardChartType.valueOf(it.trim()) }.getOrNull() }
                 ?.toSet()
-                ?: emptySet()
+                ?: emptySet(),
+            ntripEnabled = p.getBoolean(KEY_NTRIP_ENABLED, false),
+            ntripCasters = run {
+                val json = p.getString(KEY_NTRIP_CASTERS, null) ?: return@run NtripCaster.DEFAULTS
+                try {
+                    val arr = JSONArray(json)
+                    (0 until arr.length()).map { i ->
+                        val o = arr.getJSONObject(i)
+                        NtripCaster(
+                            id = o.getInt("id"),
+                            name = o.getString("name"),
+                            host = o.getString("host"),
+                            port = o.getInt("port"),
+                            mountpoint = o.optString("mountpoint", ""),
+                            username = o.optString("username", ""),
+                            password = o.optString("password", "")
+                        )
+                    }
+                } catch (_: Exception) { NtripCaster.DEFAULTS }
+            },
+            ntripSelectedCasterId = p.getInt(KEY_NTRIP_SELECTED_ID, 0),
+            ntripNextCasterId = p.getInt(KEY_NTRIP_NEXT_ID, NtripCaster.DEFAULTS.size)
         )
     }
 
