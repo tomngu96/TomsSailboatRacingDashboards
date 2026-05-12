@@ -206,6 +206,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
                 activeMarkIndex = state.activeMarkIndex,
                 trailHistory = state.trailHistory,
                 showHeadingLines = state.showHeadingLines,
+                headingLineMeters = state.headingLineMeters,
                 historicalCogDeg = state.historicalCogDeg,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -450,6 +451,7 @@ private fun RaceMap(
     activeMarkIndex: Int,
     trailHistory: List<SensorData>,
     showHeadingLines: Boolean,
+    headingLineMeters: Int,
     historicalCogDeg: Float?,
     modifier: Modifier = Modifier
 ) {
@@ -530,7 +532,7 @@ private fun RaceMap(
                     val boatPt = GeoPoint(latestData!!.lat, latestData.lon)
                     // Green — IMU heading (bow direction), only when IMU is calibrated
                     if ((latestData.imuAccuracy) >= 1) {
-                        val hdgEnd = projectGeoPoint(latestData.lat, latestData.lon, latestData.heading.toDouble(), 1000.0)
+                        val hdgEnd = projectGeoPoint(latestData.lat, latestData.lon, latestData.heading.toDouble(), headingLineMeters.toDouble())
                         Polyline(mv).apply {
                             setPoints(listOf(boatPt, hdgEnd))
                             outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
@@ -543,7 +545,7 @@ private fun RaceMap(
                     // Red — COG (actual course over ground), only when moving and fix active
                     val cogDeg = historicalCogDeg ?: latestData.cogDeg
                     if (hasFix && latestData.sogKts >= 0.3f) {
-                        val cogEnd = projectGeoPoint(latestData.lat, latestData.lon, cogDeg.toDouble(), 1000.0)
+                        val cogEnd = projectGeoPoint(latestData.lat, latestData.lon, cogDeg.toDouble(), headingLineMeters.toDouble())
                         Polyline(mv).apply {
                             setPoints(listOf(boatPt, cogEnd))
                             outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)

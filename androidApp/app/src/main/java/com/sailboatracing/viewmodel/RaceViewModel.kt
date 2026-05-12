@@ -132,6 +132,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 gpsStaleThresholdSeconds = settings.gpsStaleThresholdSeconds,
                 showMap = settings.showMap,
                 showHeadingLines = settings.showHeadingLines,
+                headingLineMeters = settings.headingLineMeters,
                 usePhoneGps = settings.usePhoneGps,
                 usePhoneImu = settings.usePhoneImu,
                 cogWindowSeconds = settings.cogWindowSeconds,
@@ -168,6 +169,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             gpsStaleThresholdSeconds = s.gpsStaleThresholdSeconds,
             showMap = s.showMap,
             showHeadingLines = s.showHeadingLines,
+            headingLineMeters = s.headingLineMeters,
             usePhoneGps = s.usePhoneGps,
             usePhoneImu = s.usePhoneImu,
             cogWindowSeconds = s.cogWindowSeconds,
@@ -526,6 +528,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         saveSettings()
     }
 
+    fun setHeadingLineMeters(meters: Int) {
+        _state.update { it.copy(headingLineMeters = meters) }
+        saveSettings()
+    }
+
     fun setGpsStaleThreshold(seconds: Int) {
         _state.update { it.copy(gpsStaleThresholdSeconds = seconds) }
         saveSettings()
@@ -738,6 +745,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 narrateTimer = defaults.narrateTimer,
                 gpsStaleThresholdSeconds = defaults.gpsStaleThresholdSeconds,
                 showMap = defaults.showMap,
+                showHeadingLines = defaults.showHeadingLines,
+                headingLineMeters = defaults.headingLineMeters,
                 cogWindowSeconds = defaults.cogWindowSeconds,
                 dashboardCharts = defaults.dashboardCharts
             )

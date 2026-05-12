@@ -197,6 +197,7 @@ private fun StartLineTab(
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
             showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
             onMark = { viewModel.markStartLinePin() },
             onMarkAt = { lat, lon -> viewModel.markStartLinePinAt(lat, lon) }
         )
@@ -215,6 +216,7 @@ private fun StartLineTab(
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
             showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
             onMark = { viewModel.markStartLineBoat() },
             onMarkAt = { lat, lon -> viewModel.markStartLineBoatAt(lat, lon) }
         )
@@ -252,6 +254,7 @@ private fun StartLinePointRow(
     marks: List<RaceMark> = emptyList(),
     historicalCogDeg: Float? = null,
     showHeadingLines: Boolean = true,
+    headingLineMeters: Int = 1000,
     onMark: () -> Unit,
     onMarkAt: (Double, Double) -> Unit
 ) {
@@ -324,6 +327,7 @@ private fun StartLinePointRow(
             marks = marks,
             historicalCogDeg = historicalCogDeg,
             showHeadingLines = showHeadingLines,
+            headingLineMeters = headingLineMeters,
             onDismiss = { showMapPicker = false },
             onConfirm = { pos ->
                 onMarkAt(pos.latitude, pos.longitude)
@@ -503,6 +507,7 @@ private fun MarksTab(
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
             showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
             onDismiss = { showAddMarkDialog = false },
             onAdd = { name, position, rounding, isGate, gateEnd ->
                 viewModel.addMarkAt(name, position.latitude, position.longitude, rounding, isGate, gateEnd)
@@ -520,6 +525,7 @@ private fun MarksTab(
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
             showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
             onDismiss = { editingMark = null },
             onSave = { name, position, rounding, isGate, gateEnd ->
                 viewModel.editMark(mark.id, name, rounding, position, isGate, gateEnd)
@@ -736,6 +742,7 @@ private fun AddMarkDialog(
     marks: List<RaceMark> = emptyList(),
     historicalCogDeg: Float? = null,
     showHeadingLines: Boolean = true,
+    headingLineMeters: Int = 1000,
     onDismiss: () -> Unit,
     onAdd: (name: String, position: LatLng, rounding: Rounding, isGate: Boolean, gateEnd: LatLng?) -> Unit
 ) {
@@ -920,6 +927,7 @@ private fun AddMarkDialog(
             marks = marks,
             historicalCogDeg = historicalCogDeg,
             showHeadingLines = showHeadingLines,
+            headingLineMeters = headingLineMeters,
             onDismiss = { showMapPickerA = false },
             onConfirm = { pos -> pickedPosition = pos; showMapPickerA = false }
         )
@@ -932,6 +940,7 @@ private fun AddMarkDialog(
             marks = marks,
             historicalCogDeg = historicalCogDeg,
             showHeadingLines = showHeadingLines,
+            headingLineMeters = headingLineMeters,
             onDismiss = { showMapPickerB = false },
             onConfirm = { pos -> pickedGateEnd = pos; showMapPickerB = false }
         )
@@ -949,6 +958,7 @@ private fun EditMarkDialog(
     marks: List<RaceMark> = emptyList(),
     historicalCogDeg: Float? = null,
     showHeadingLines: Boolean = true,
+    headingLineMeters: Int = 1000,
     onDismiss: () -> Unit,
     onSave: (name: String, position: LatLng, rounding: Rounding, isGate: Boolean, gateEnd: LatLng?) -> Unit
 ) {
@@ -1125,6 +1135,7 @@ private fun EditMarkDialog(
             marks = marks,
             historicalCogDeg = historicalCogDeg,
             showHeadingLines = showHeadingLines,
+            headingLineMeters = headingLineMeters,
             onDismiss = { showMapPickerA = false },
             onConfirm = { pos -> pickedPosition = pos; showMapPickerA = false }
         )
@@ -1137,6 +1148,7 @@ private fun EditMarkDialog(
             marks = marks,
             historicalCogDeg = historicalCogDeg,
             showHeadingLines = showHeadingLines,
+            headingLineMeters = headingLineMeters,
             onDismiss = { showMapPickerB = false },
             onConfirm = { pos -> pickedGateEnd = pos; showMapPickerB = false }
         )
@@ -1235,6 +1247,7 @@ private fun MapPickerDialog(
     marks: List<RaceMark> = emptyList(),
     historicalCogDeg: Float? = null,
     showHeadingLines: Boolean = true,
+    headingLineMeters: Int = 1000,
     onDismiss: () -> Unit,
     onConfirm: (LatLng) -> Unit
 ) {
@@ -1320,7 +1333,7 @@ private fun MapPickerDialog(
                             val boatGeo = GeoPoint(boatLat, boatLon)
                             if (showHeadingLines) {
                                 if ((latestData.imuAccuracy) >= 1) {
-                                    val hdgEnd = projectGeoPoint(boatLat, boatLon, latestData.heading.toDouble(), 1000.0)
+                                    val hdgEnd = projectGeoPoint(boatLat, boatLon, latestData.heading.toDouble(), headingLineMeters.toDouble())
                                     mv.overlays.add(Polyline(mv).apply {
                                         setPoints(listOf(boatGeo, hdgEnd))
                                         outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
@@ -1330,7 +1343,7 @@ private fun MapPickerDialog(
                                 }
                                 val cogDeg = historicalCogDeg ?: latestData.cogDeg
                                 if (latestData.fixType >= 2 && latestData.sogKts >= 0.3f) {
-                                    val cogEnd = projectGeoPoint(boatLat, boatLon, cogDeg.toDouble(), 1000.0)
+                                    val cogEnd = projectGeoPoint(boatLat, boatLon, cogDeg.toDouble(), headingLineMeters.toDouble())
                                     mv.overlays.add(Polyline(mv).apply {
                                         setPoints(listOf(boatGeo, cogEnd))
                                         outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)

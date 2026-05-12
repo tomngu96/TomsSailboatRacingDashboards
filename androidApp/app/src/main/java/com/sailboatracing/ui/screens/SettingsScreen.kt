@@ -791,9 +791,25 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                         )
                     )
                 }
+                Text(text = "Line length", color = Color(0xFF888888), fontSize = 13.sp)
+                SliderWithInput(
+                    value = state.headingLineMeters,
+                    onValueChange = { viewModel.setHeadingLineMeters(it) },
+                    valueRange = 50f..1000f,
+                    steps = 37,
+                    unit = "m",
+                    accentColor = PrimaryColor
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "50m", color = Color(0xFF666666), fontSize = 11.sp)
+                    Text(text = "1000m", color = Color(0xFF666666), fontSize = 11.sp)
+                }
                 Text(
                     text = "Draws a green line in the heading direction (bow) and a red line in the COG direction on the map. " +
-                        "Both project 300 m ahead. COG line only appears when moving.",
+                        "Both lines share this length. COG line only appears when moving.",
                     color = Color(0xFF666666),
                     fontSize = 11.sp,
                     lineHeight = 16.sp
@@ -913,10 +929,7 @@ private fun SliderWithInput(
             onValueChange = { input ->
                 textValue = input
                 val v = input.toIntOrNull()
-                if (v != null) {
-                    val clamped = v.coerceIn(valueRange.start.toInt(), valueRange.endInclusive.toInt())
-                    onValueChange(clamped)
-                }
+                if (v != null && v > 0) onValueChange(v)
             },
             singleLine = true,
             suffix = {

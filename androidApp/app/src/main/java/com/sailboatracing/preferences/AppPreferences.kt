@@ -24,6 +24,7 @@ object AppPreferences {
     private const val KEY_GPS_STALE_THRESHOLD = "gps_stale_threshold"
     private const val KEY_SHOW_MAP = "show_map"
     private const val KEY_HEADING_LINES = "heading_lines"
+    private const val KEY_HEADING_LINE_METERS = "heading_line_meters"
     private const val KEY_USE_PHONE_GPS = "use_phone_gps"
     private const val KEY_USE_PHONE_IMU = "use_phone_imu"
     private const val KEY_COG_WINDOW = "cog_window"
@@ -146,6 +147,7 @@ object AppPreferences {
         val gpsStaleThresholdSeconds: Int = 5,
         val showMap: Boolean = true,
         val showHeadingLines: Boolean = true,
+        val headingLineMeters: Int = 1000,
         val usePhoneGps: Boolean = true,
         val usePhoneImu: Boolean = true,
         val cogWindowSeconds: Int = 1,
@@ -167,6 +169,7 @@ object AppPreferences {
         gpsStaleThresholdSeconds: Int,
         showMap: Boolean,
         showHeadingLines: Boolean,
+        headingLineMeters: Int,
         usePhoneGps: Boolean,
         usePhoneImu: Boolean,
         cogWindowSeconds: Int,
@@ -199,6 +202,7 @@ object AppPreferences {
             .putInt(KEY_GPS_STALE_THRESHOLD, gpsStaleThresholdSeconds)
             .putBoolean(KEY_SHOW_MAP, showMap)
             .putBoolean(KEY_HEADING_LINES, showHeadingLines)
+            .putInt(KEY_HEADING_LINE_METERS, headingLineMeters)
             .putBoolean(KEY_USE_PHONE_GPS, usePhoneGps)
             .putBoolean(KEY_USE_PHONE_IMU, usePhoneImu)
             .putInt(KEY_COG_WINDOW, cogWindowSeconds)
@@ -222,6 +226,7 @@ object AppPreferences {
             gpsStaleThresholdSeconds = p.getInt(KEY_GPS_STALE_THRESHOLD, 5),
             showMap = p.getBoolean(KEY_SHOW_MAP, true),
             showHeadingLines = p.getBoolean(KEY_HEADING_LINES, true),
+            headingLineMeters = p.getInt(KEY_HEADING_LINE_METERS, 1000),
             usePhoneGps = p.getBoolean(KEY_USE_PHONE_GPS, true),
             usePhoneImu = p.getBoolean(KEY_USE_PHONE_IMU, true),
             cogWindowSeconds = p.getInt(KEY_COG_WINDOW, 1),
@@ -270,6 +275,7 @@ object AppPreferences {
             .remove(KEY_GPS_STALE_THRESHOLD)
             .remove(KEY_SHOW_MAP)
             .remove(KEY_HEADING_LINES)
+            .remove(KEY_HEADING_LINE_METERS)
             .remove(KEY_USE_PHONE_GPS)
             .remove(KEY_USE_PHONE_IMU)
             .remove(KEY_COG_WINDOW)
