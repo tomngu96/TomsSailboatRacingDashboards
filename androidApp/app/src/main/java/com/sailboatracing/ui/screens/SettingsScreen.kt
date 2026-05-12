@@ -819,6 +819,43 @@ fun SettingsScreen(viewModel: RaceViewModel) {
 
         HorizontalDivider(color = Color(0xFF222222))
 
+        // ── IMU Mounting ───────────────────────────────────────────────
+        SectionHeader("IMU MOUNTING")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Board mounted upside-down", color = Color.White, fontSize = 14.sp)
+                    Switch(
+                        checked = state.imuInverted,
+                        onCheckedChange = { viewModel.setImuInverted(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = Color(0xFFFFAB40),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF333333)
+                        )
+                    )
+                }
+                Text(
+                    text = "Enable if the Teensy/IMU board is mounted with the chip facing down. " +
+                        "Mirrors heading 180°, and negates roll, pitch, and yaw rate so all readings stay correct.",
+                    color = Color(0xFF666666),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF222222))
+
         // ── Reset ──────────────────────────────────────────────────────
         OutlinedButton(
             onClick = { showResetConfirm = true },

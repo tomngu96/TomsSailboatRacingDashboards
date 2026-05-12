@@ -109,6 +109,7 @@ data class RaceState(
     val showMap: Boolean = true,
     val showHeadingLines: Boolean = true,
     val headingLineMeters: Int = 1000,
+    val imuInverted: Boolean = false,
     val usePhoneGps: Boolean = true,
     val phoneGpsActive: Boolean = false,
     val usePhoneImu: Boolean = true,

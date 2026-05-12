@@ -133,6 +133,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 showMap = settings.showMap,
                 showHeadingLines = settings.showHeadingLines,
                 headingLineMeters = settings.headingLineMeters,
+                imuInverted = settings.imuInverted,
                 usePhoneGps = settings.usePhoneGps,
                 usePhoneImu = settings.usePhoneImu,
                 cogWindowSeconds = settings.cogWindowSeconds,
@@ -170,6 +171,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             showMap = s.showMap,
             showHeadingLines = s.showHeadingLines,
             headingLineMeters = s.headingLineMeters,
+            imuInverted = s.imuInverted,
             usePhoneGps = s.usePhoneGps,
             usePhoneImu = s.usePhoneImu,
             cogWindowSeconds = s.cogWindowSeconds,
@@ -533,6 +535,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         saveSettings()
     }
 
+    fun setImuInverted(inverted: Boolean) {
+        _state.update { it.copy(imuInverted = inverted) }
+        saveSettings()
+    }
+
     fun setGpsStaleThreshold(seconds: Int) {
         _state.update { it.copy(gpsStaleThresholdSeconds = seconds) }
         saveSettings()
@@ -747,6 +754,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 showMap = defaults.showMap,
                 showHeadingLines = defaults.showHeadingLines,
                 headingLineMeters = defaults.headingLineMeters,
+                imuInverted = defaults.imuInverted,
                 cogWindowSeconds = defaults.cogWindowSeconds,
                 dashboardCharts = defaults.dashboardCharts
             )
@@ -863,6 +871,14 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     private fun onNewData(data: SensorData) {
+        // Apply IMU inversion when the board is mounted upside-down:
+        // heading mirrors across 180°, roll and pitch negate, yaw rate negates.
+        val data = if (_state.value.imuInverted) data.copy(
+            heading = (540f - data.heading) % 360f,
+            roll    = -data.roll,
+            pitch   = -data.pitch,
+            gyroZ   = -data.gyroZ
+        ) else data
         val currentLast = _state.value.latestData
         val gpsAugmented = if (!data.isDirectGpsReading &&
             currentLast != null && (currentLast.lat != 0.0 || currentLast.lon != 0.0)

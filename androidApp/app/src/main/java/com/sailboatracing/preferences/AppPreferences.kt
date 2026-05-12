@@ -25,6 +25,7 @@ object AppPreferences {
     private const val KEY_SHOW_MAP = "show_map"
     private const val KEY_HEADING_LINES = "heading_lines"
     private const val KEY_HEADING_LINE_METERS = "heading_line_meters"
+    private const val KEY_IMU_INVERTED = "imu_inverted"
     private const val KEY_USE_PHONE_GPS = "use_phone_gps"
     private const val KEY_USE_PHONE_IMU = "use_phone_imu"
     private const val KEY_COG_WINDOW = "cog_window"
@@ -148,6 +149,7 @@ object AppPreferences {
         val showMap: Boolean = true,
         val showHeadingLines: Boolean = true,
         val headingLineMeters: Int = 1000,
+        val imuInverted: Boolean = false,
         val usePhoneGps: Boolean = true,
         val usePhoneImu: Boolean = true,
         val cogWindowSeconds: Int = 1,
@@ -170,6 +172,7 @@ object AppPreferences {
         showMap: Boolean,
         showHeadingLines: Boolean,
         headingLineMeters: Int,
+        imuInverted: Boolean,
         usePhoneGps: Boolean,
         usePhoneImu: Boolean,
         cogWindowSeconds: Int,
@@ -203,6 +206,7 @@ object AppPreferences {
             .putBoolean(KEY_SHOW_MAP, showMap)
             .putBoolean(KEY_HEADING_LINES, showHeadingLines)
             .putInt(KEY_HEADING_LINE_METERS, headingLineMeters)
+            .putBoolean(KEY_IMU_INVERTED, imuInverted)
             .putBoolean(KEY_USE_PHONE_GPS, usePhoneGps)
             .putBoolean(KEY_USE_PHONE_IMU, usePhoneImu)
             .putInt(KEY_COG_WINDOW, cogWindowSeconds)
@@ -227,6 +231,7 @@ object AppPreferences {
             showMap = p.getBoolean(KEY_SHOW_MAP, true),
             showHeadingLines = p.getBoolean(KEY_HEADING_LINES, true),
             headingLineMeters = p.getInt(KEY_HEADING_LINE_METERS, 1000),
+            imuInverted = p.getBoolean(KEY_IMU_INVERTED, false),
             usePhoneGps = p.getBoolean(KEY_USE_PHONE_GPS, true),
             usePhoneImu = p.getBoolean(KEY_USE_PHONE_IMU, true),
             cogWindowSeconds = p.getInt(KEY_COG_WINDOW, 1),
@@ -276,6 +281,7 @@ object AppPreferences {
             .remove(KEY_SHOW_MAP)
             .remove(KEY_HEADING_LINES)
             .remove(KEY_HEADING_LINE_METERS)
+            .remove(KEY_IMU_INVERTED)
             .remove(KEY_USE_PHONE_GPS)
             .remove(KEY_USE_PHONE_IMU)
             .remove(KEY_COG_WINDOW)
