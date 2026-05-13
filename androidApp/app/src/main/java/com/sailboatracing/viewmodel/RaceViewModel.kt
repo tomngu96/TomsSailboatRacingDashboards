@@ -370,14 +370,22 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     fun markStartLinePinAt(lat: Double, lon: Double) {
         val pos = LatLng(lat, lon)
         _state.update { current ->
-            val existing = current.startLine
-            if (existing != null && current.pendingStartPin == null) {
-                current.copy(startLine = existing.copy(pin = pos))
-            } else {
-                current.copy(
-                    pendingStartPin = pos,
-                    startLine = StartLine(pin = pos, boat = pos)
-                )
+            when {
+                current.pendingStartBoat != null ->
+                    // Boat was set first — complete the line now
+                    current.copy(
+                        startLine = StartLine(pin = pos, boat = current.pendingStartBoat),
+                        pendingStartPin = null,
+                        pendingStartBoat = null
+                    )
+                current.startLine != null && current.pendingStartPin == null ->
+                    // Line already confirmed — just move the pin
+                    current.copy(startLine = current.startLine.copy(pin = pos))
+                else ->
+                    current.copy(
+                        pendingStartPin = pos,
+                        startLine = StartLine(pin = pos, boat = pos)
+                    )
             }
         }
         saveStartLine()
@@ -390,18 +398,22 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 current.pendingStartPin != null ->
                     current.copy(
                         startLine = StartLine(pin = current.pendingStartPin, boat = pos),
-                        pendingStartPin = null
+                        pendingStartPin = null,
+                        pendingStartBoat = null
                     )
                 current.startLine != null ->
-                    current.copy(startLine = current.startLine.copy(boat = pos))
-                else -> current
+                    current.copy(startLine = current.startLine.copy(boat = pos),
+                        pendingStartBoat = null)
+                else ->
+                    // Boat set first — pin not yet marked
+                    current.copy(pendingStartBoat = pos)
             }
         }
         saveStartLine()
     }
 
     fun clearStartLine() {
-        _state.update { it.copy(startLine = null, startLineStatus = null, pendingStartPin = null) }
+        _state.update { it.copy(startLine = null, startLineStatus = null, pendingStartPin = null, pendingStartBoat = null) }
         saveStartLine()
     }
 
@@ -480,7 +492,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun resetMarks() {
-        _state.update { it.copy(marks = emptyList(), activeMarkIndex = 0, startLine = null, startLineStatus = null, pendingStartPin = null) }
+        _state.update { it.copy(marks = emptyList(), activeMarkIndex = 0, startLine = null, startLineStatus = null, pendingStartPin = null, pendingStartBoat = null) }
         nextMarkId = 0
         AppPreferences.clearMarks(app.applicationContext)
         AppPreferences.saveStartLine(app.applicationContext, null)

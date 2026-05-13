@@ -165,7 +165,11 @@ private fun StartLineTab(
     val hasRecentGpsFix = !state.gpsStale && state.lastGpsFixMs > 0L
     val line = state.startLine
     val pendingPin = state.pendingStartPin
-    val lineConfirmed = line != null && pendingPin == null
+    val pendingBoat = state.pendingStartBoat
+    val lineConfirmed = line != null && pendingPin == null && pendingBoat == null
+    val currentGpsPosition = state.latestData?.let { d ->
+        if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
+    }
 
     Column(
         modifier = Modifier
@@ -187,12 +191,10 @@ private fun StartLineTab(
         // PIN end
         StartLinePointRow(
             label = "PIN",
-            position = line?.pin,
+            position = pendingPin ?: line?.pin,
             confirmed = lineConfirmed || pendingPin != null,
             hasRecentGpsFix = hasRecentGpsFix,
-            currentGpsPosition = state.latestData?.let { d ->
-                if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
-            },
+            currentGpsPosition = currentGpsPosition,
             latestData = state.latestData,
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
@@ -202,16 +204,13 @@ private fun StartLineTab(
             onMarkAt = { lat, lon -> viewModel.markStartLinePinAt(lat, lon) }
         )
 
-        // BOAT end — disabled until pin is set
+        // BOAT end — always enabled, can be marked independently
         StartLinePointRow(
             label = "BOAT END",
-            position = if (lineConfirmed) line?.boat else null,
-            confirmed = lineConfirmed,
+            position = pendingBoat ?: if (lineConfirmed) line?.boat else null,
+            confirmed = lineConfirmed || pendingBoat != null,
             hasRecentGpsFix = hasRecentGpsFix,
-            enabled = pendingPin != null || lineConfirmed,
-            currentGpsPosition = state.latestData?.let { d ->
-                if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
-            },
+            currentGpsPosition = currentGpsPosition,
             latestData = state.latestData,
             marks = state.marks,
             historicalCogDeg = state.historicalCogDeg,
@@ -221,9 +220,16 @@ private fun StartLineTab(
             onMarkAt = { lat, lon -> viewModel.markStartLineBoatAt(lat, lon) }
         )
 
-        if (pendingPin != null && !lineConfirmed) {
+        if (pendingPin != null && pendingBoat == null && !lineConfirmed) {
             Text(
                 text = "Sail to the boat end of the line, then tap MARK BOAT END.",
+                color = Color(0xFF888888),
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+        } else if (pendingBoat != null && pendingPin == null && !lineConfirmed) {
+            Text(
+                text = "Sail to the pin end of the line, then tap MARK PIN.",
                 color = Color(0xFF888888),
                 fontSize = 12.sp,
                 lineHeight = 18.sp
@@ -386,12 +392,13 @@ private fun MarksTab(
             StartLineSummaryCard(
                 startLine = state.startLine,
                 pendingStartPin = state.pendingStartPin,
+                pendingStartBoat = state.pendingStartBoat,
                 onClear = { viewModel.clearStartLine() },
                 onEdit = onNavigateToStartLineTab
             )
 
             // Copy start line as a gate mark (e.g. for a finish or mid-course gate)
-            val lineConfirmed = state.startLine != null && state.pendingStartPin == null
+            val lineConfirmed = state.startLine != null && state.pendingStartPin == null && state.pendingStartBoat == null
             if (lineConfirmed) {
                 OutlinedButton(
                     onClick = { showCopyStartLineDialog = true },
@@ -553,10 +560,11 @@ private fun MarksTab(
 private fun StartLineSummaryCard(
     startLine: StartLine?,
     pendingStartPin: LatLng?,
+    pendingStartBoat: LatLng? = null,
     onClear: () -> Unit = {},
     onEdit: () -> Unit = {}
 ) {
-    val lineConfirmed = startLine != null && pendingStartPin == null
+    val lineConfirmed = startLine != null && pendingStartPin == null && pendingStartBoat == null
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -589,12 +597,13 @@ private fun StartLineSummaryCard(
                         text = when {
                             lineConfirmed -> "CONFIRMED"
                             pendingStartPin != null -> "PIN ONLY"
+                            pendingStartBoat != null -> "BOAT ONLY"
                             else -> "NOT SET"
                         },
                         fontSize = 10.sp,
                         color = when {
                             lineConfirmed -> Color(0xFF00FF88)
-                            pendingStartPin != null -> Color(0xFFFFAB40)
+                            pendingStartPin != null || pendingStartBoat != null -> Color(0xFFFFAB40)
                             else -> Color(0xFF555555)
                         }
                     )

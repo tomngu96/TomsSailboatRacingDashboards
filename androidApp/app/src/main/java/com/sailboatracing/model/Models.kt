@@ -121,8 +121,9 @@ data class RaceState(
     val narrateTimer: Boolean = true,
     val headingShortWindowSec: Int = 3,
     val headingLongWindowSec: Int = 10,
-    // Start line: non-null while only pin is set (boat end not yet confirmed)
+    // Non-null while only one end of the start line has been set
     val pendingStartPin: LatLng? = null,
+    val pendingStartBoat: LatLng? = null,
     // GPS trail — only direct GPS readings, windowed to trailWindowSeconds
     val trailHistory: List<SensorData> = emptyList(),
     val trailWindowSeconds: Int = 60,
