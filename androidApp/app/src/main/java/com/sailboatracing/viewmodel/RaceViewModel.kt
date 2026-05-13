@@ -252,7 +252,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         if (ts.running) return
         if (ts.remainingMs == 0L) {
             _state.update { it.copy(timerState = it.timerState.copy(finished = true)) }
-            if (_state.value.narrateTimer) tts?.speak("Go", TextToSpeech.QUEUE_FLUSH, null, null)
+            if (_state.value.narrateTimer) ttsSpeak("Go")
             return
         }
         _state.update { it.copy(timerState = it.timerState.copy(running = true, finished = false)) }
@@ -285,7 +285,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                         tts?.speak("Go", TextToSpeech.QUEUE_FLUSH, null, null)
                     } else {
                         ttsThresholdCrossed(prevRemainingMs, ts.remainingMs)?.let { threshMs ->
-                            tts?.speak(ttsText(threshMs), TextToSpeech.QUEUE_FLUSH, null, null)
+                            ttsSpeak(ttsText(threshMs))
                         }
                     }
                 }
@@ -297,11 +297,13 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private fun ttsThresholdCrossed(prevMs: Long, currentMs: Long): Long? {
         if (currentMs >= prevMs) return null
+        // Every minute above 5 min
         if (prevMs > 300_000L) {
             val k = (prevMs - 1L) / 60_000L
             val t = k * 60_000L
             if (t >= currentMs && t >= 300_000L) return t
         }
+        // Every 30 s between 1–5 min
         if (prevMs > 60_000L) {
             val hi = minOf(prevMs - 1L, 299_999L)
             if (hi >= 60_000L) {
@@ -310,16 +312,39 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 if (t >= currentMs && t >= 60_000L) return t
             }
         }
-        if (prevMs > 5_000L) {
+        // Every 5 s between 10 s and 1 min
+        if (prevMs > 10_000L) {
             val hi = minOf(prevMs - 1L, 59_999L)
-            if (hi >= 5_000L) {
+            if (hi >= 10_000L) {
                 val k = hi / 5_000L
                 val t = k * 5_000L
-                if (t >= currentMs && t >= 5_000L) return t
+                if (t >= currentMs && t >= 10_000L) return t
+            }
+        }
+        // Every second from 10 s down to 1 s
+        if (prevMs > 0L) {
+            val hi = minOf(prevMs - 1L, 10_000L)
+            if (hi >= 1_000L) {
+                val t = (hi / 1_000L) * 1_000L
+                if (t >= currentMs && t >= 1_000L) return t
             }
         }
         return null
     }
+
+    private fun ttsSpeak(text: String) {
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
+    private val numberWords = mapOf(
+        1L to "one", 2L to "two", 3L to "three", 4L to "four", 5L to "five",
+        6L to "six", 7L to "seven", 8L to "eight", 9L to "nine", 10L to "ten",
+        11L to "eleven", 12L to "twelve", 13L to "thirteen", 14L to "fourteen",
+        15L to "fifteen", 16L to "sixteen", 17L to "seventeen", 18L to "eighteen",
+        19L to "nineteen", 20L to "twenty", 25L to "twenty five", 30L to "thirty",
+        35L to "thirty five", 40L to "forty", 45L to "forty five", 50L to "fifty",
+        55L to "fifty five"
+    )
 
     private fun ttsText(threshMs: Long): String {
         val totalSec = threshMs / 1000L
@@ -327,10 +352,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         val seconds = totalSec % 60L
         return if (threshMs >= 60_000L) {
             val minWord = if (minutes == 1L) "minute" else "minutes"
-            if (seconds == 0L) "$minutes $minWord left"
-            else "$minutes $minWord ${seconds} ${if (seconds == 1L) "second" else "seconds"} left"
+            if (seconds == 0L) "$minutes $minWord"
+            else "$minutes $minWord ${seconds} ${if (seconds == 1L) "second" else "seconds"}"
         } else {
-            "$totalSec ${if (totalSec == 1L) "second" else "seconds"} left"
+            numberWords[totalSec] ?: totalSec.toString()
         }
     }
 
