@@ -58,6 +58,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     var nextCasterId = NtripCaster.DEFAULTS.size
 
     private var lastGoodHeading: Float? = null
+    private var headingSpikeCount: Int = 0
     // Kept at 3 minutes regardless of the display historyWindowSeconds, so the headed/lifted
     // detector always has enough baseline data.
     private var detectorHistory: List<SensorData> = emptyList()
@@ -899,12 +900,25 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         val last = lastGoodHeading
         if (last == null) {
             lastGoodHeading = incoming
+            headingSpikeCount = 0
             return incoming
         }
         var diff = incoming - last
         if (diff > 180f) diff -= 360f
         if (diff < -180f) diff += 360f
-        return if (abs(diff) > 60f) last else { lastGoodHeading = incoming; incoming }
+        return if (abs(diff) > 60f) {
+            headingSpikeCount++
+            if (headingSpikeCount >= 3) {
+                // Three consecutive spikes — sensor has genuinely moved, accept and reset
+                lastGoodHeading = incoming
+                headingSpikeCount = 0
+            }
+            lastGoodHeading ?: incoming
+        } else {
+            headingSpikeCount = 0
+            lastGoodHeading = incoming
+            incoming
+        }
     }
 
     private fun onNewData(data: SensorData) {
