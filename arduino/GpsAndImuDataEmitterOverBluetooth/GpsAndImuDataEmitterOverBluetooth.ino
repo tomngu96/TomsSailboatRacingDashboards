@@ -21,23 +21,32 @@
  *     GPS option B — NEO-M9N (GPS-15712, UART)          [GPS_MODULE_M9N]
  *       Serial2  GPS-TX → Teensy pin 7 (RX),  GPS-RX → Teensy pin 8 (TX)
  *       PWR: 3.3 V (Teensy 3V3 pin),  GND → GND
- *       Baud: 9600 default
+ *       Baud: 38400 (SparkFun board default)
  *
- *   ESP32
- *     BNO080/085       I2C      SDA=21, SCL=22
+ *   ESP32 (30-pin CP2102 DevKit — all wiring on the LEFT rail)
+ *     BNO080/085       I2C      SDA=GPIO21 (labelled D21), SCL=GPIO22 (labelled D22)
  *                               PWR: 3.3 V (ESP32 3V3 pin),   GND → GND
  *     Bluetooth                 built-in, no extra hardware needed
  *
  *     GPS option A — ZED-F9P / NEO-D9S combo (UART)     [GPS_MODULE_F9P]
  *       Use the UART1 pins on the board directly — do NOT use the Qwiic connector.
- *       Serial2  F9P-TX → ESP32 pin 16 (RX),  F9P-RX → ESP32 pin 17 (TX)
+ *       Serial2  F9P-TX → GPIO16 (labelled RX2),  F9P-RX → GPIO17 (labelled TX2)
  *       PWR: 3.3 V (ESP32 3V3 pin),  GND → GND
  *       Baud: 115200
  *
  *     GPS option B — NEO-M9N (GPS-15712, UART)          [GPS_MODULE_M9N]
- *       Serial2  GPS-TX → ESP32 pin 16 (RX),  GPS-RX → ESP32 pin 17 (TX)
+ *       Serial2  GPS-TX → GPIO16 (labelled RX2),  GPS-RX → GPIO17 (labelled TX2)
  *       PWR: 3.3 V (ESP32 3V3 pin),  GND → GND
- *       Baud: 9600 default
+ *       Baud: 38400 (SparkFun board default)
+ *
+ *     30-pin CP2102 left rail (top to bottom) — all ESP32 connections on this side:
+ *       VIN  → GPS VCC  (5 V — GPS board has its own LDO; 3V3 is too close to dropout)
+ *       3V3  → BNO080 VCC
+ *       GND  → BNO080 GND, GPS GND
+ *       D21  → BNO080 SDA
+ *       D22  → BNO080 SCL
+ *       RX2  → GPS TX      (GPIO16)
+ *       TX2  → GPS RX      (GPIO17)
  *
  * HC-05 AT-command setup (Teensy only):
  *   1. Flash hc05_passthrough.ino to Teensy.
@@ -63,7 +72,7 @@
 
 #include <Wire.h>
 #include "SparkFun_BNO080_Arduino_Library.h"
-// #include <SparkFun_u-blox_GNSS_Arduino_Library.h>   // uncomment when GPS is wired
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 
 // ── Platform-specific Bluetooth setup ────────────────────────────────────────
 #ifdef ARDUINO_ARCH_ESP32
@@ -101,7 +110,7 @@
 #ifdef GPS_MODULE_F9P
   #define GPS_BAUD 115200  // F9P handles 20 Hz RTK comfortably at 115200
 #else
-  #define GPS_BAUD 9600    // M9N default
+  #define GPS_BAUD 38400   // SparkFun NEO-M9N default
 #endif
 
 // ── IMU mounting ─────────────────────────────────────────────────────────────
@@ -111,7 +120,7 @@
 
 // ── Objects ──────────────────────────────────────────────────────────────────
 BNO080 imu;
-// SFE_UBLOX_GNSS gps;   // uncomment when GPS is wired
+SFE_UBLOX_GNSS gps;
 
 // ── IMU state ────────────────────────────────────────────────────────────────
 float    imu_hdg_deg  = 0.0f;
@@ -163,17 +172,14 @@ void setup() {
   imu.enableLinearAccelerometer(40);
 
   Serial.println("BNO080 ready.");
-  Serial.println("GPS code present but inactive — uncomment readGPS() in loop() when wired.");
 }
 
 // =============================================================================
 void loop() {
   bool newIMU = pollIMU();
+  readGPS();
 
-  // bool newGPS = readGPS();   // uncomment after wiring GPS-15712
-  bool newGPS = false;
-
-  if (gps_active ? newGPS : newIMU) {
+  if (newIMU) {
     transmitPacket();
   }
 
@@ -221,7 +227,7 @@ void transmitPacket() {
   char body[160];
   int  len;
 
-  if (gps_active) {
+  if (gps_active && gps_fixType >= 2) {
     len = snprintf(body, sizeof(body),
       "SAL,%.1f,%.1f,%.1f,%.2f,%.3f,%.3f,%.3f,%u,"
       "%.7f,%.7f,%.2f,%.1f,%u,%u",
@@ -252,60 +258,40 @@ uint8_t crc8(const char* data, size_t len) {
 }
 
 // =============================================================================
-// GPS-15712 helper — wired but not called yet.
-//
-// To activate:
-//   1. Wire GPS TX → RX pin, GPS RX → TX pin (see top of file for pin numbers)
-//        GPS VCC → 3.3 V, GND → GND
-//   2. Uncomment the #include and SFE_UBLOX_GNSS gps above.
-//   3. Uncomment readGPS() in loop().
+// GPS helper — initialises Serial2 on first call, then polls for new PVT data.
 // =============================================================================
 bool readGPS() {
-  // static bool gpsInit = false;
-  // if (!gpsInit) {
-  //
-  //   // Both modules use UART (Serial2). F9P runs at 115200; M9N at 9600.
-  //   // Do NOT use the Qwiic connector for the F9P — I2C is too slow for 20 Hz RTK.
-  //   #ifdef ARDUINO_ARCH_ESP32
-  //     GPS_SERIAL.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-  //   #else
-  //     GPS_SERIAL.begin(GPS_BAUD);
-  //   #endif
-  //
-  //   #ifdef GPS_MODULE_F9P
-  //   // F9P ships at 38400 by default. Tell the library what baud we want so it
-  //   // can auto-detect and then switch the module to 115200.
-  //   if (!gps.begin(GPS_SERIAL, GPS_BAUD)) {
-  //     Serial.println("ZED-F9P not found — check UART1 TX/RX wiring and 3.3 V power.");
-  //     return false;
-  //   }
-  //   gps.setSerialRate(GPS_BAUD);   // lock module to 115200
-  //   #else
-  //   if (!gps.begin(GPS_SERIAL)) {
-  //     Serial.println("NEO-M9N not found — check TX/RX wiring and 3.3 V power.");
-  //     return false;
-  //   }
-  //   #endif
-  //
-  //   gps.setUART1Output(COM_TYPE_UBX);
-  //   gps.setNavigationFrequency(GPS_NAV_HZ);   // 20 Hz (F9P) or 25 Hz (M9N)
-  //   gps.setAutoPVT(true);
-  //   gpsInit    = true;
-  //   gps_active = true;
-  //   Serial.println("GPS ready.");
-  // }
-  //
-  // if (!gps.getPVT()) return false;
-  //
-  // gps_fixType   = gps.getFixType();
-  // gps_rtkStatus = gps.getCarrierSolutionType();  // 0=none 1=float 2=fixed (F9P only)
-  // gps_lat     = gps.getLatitude()  / 1e7;   // int32 1e-7 deg → double degrees
-  // gps_lon     = gps.getLongitude() / 1e7;
-  //
-  // float sog_mmps = (float)gps.getGroundSpeed();
-  // gps_sog_kts    = sog_mmps * 0.00194384f;
-  // gps_cog_deg    = gps.getHeading() / 1e5f;
-  // return true;
+  static bool gpsInit = false;
+  if (!gpsInit) {
 
-  return false;
+    #ifdef ARDUINO_ARCH_ESP32
+      GPS_SERIAL.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    #else
+      GPS_SERIAL.begin(GPS_BAUD);
+    #endif
+
+    if (!gps.begin(GPS_SERIAL)) {
+      Serial.println("NEO-M9N not found — check TX/RX wiring and power.");
+      return false;
+    }
+
+    gps.setUART1Output(COM_TYPE_UBX);
+    gps.setNavigationFrequency(GPS_NAV_HZ);
+    gps.setAutoPVT(true);
+    gpsInit    = true;
+    gps_active = true;
+    Serial.println("GPS ready.");
+  }
+
+  if (!gps.getPVT()) return false;
+
+  gps_fixType   = gps.getFixType();
+  gps_rtkStatus = gps.getCarrierSolutionType();
+  gps_lat       = gps.getLatitude()  / 1e7;
+  gps_lon       = gps.getLongitude() / 1e7;
+
+  float sog_mmps = (float)gps.getGroundSpeed();
+  gps_sog_kts    = sog_mmps * 0.00194384f;
+  gps_cog_deg    = gps.getHeading() / 1e5f;
+  return true;
 }
