@@ -98,6 +98,7 @@ object NtripClient {
             val request = "GET /$mountpoint HTTP/1.0\r\n" +
                 "Host: $host:$port\r\n" +
                 "User-Agent: NTRIP SailRacing/1.0\r\n" +
+
                 "Authorization: Basic $credentials\r\n" +
                 "Accept: */*\r\n" +
                 "\r\n"

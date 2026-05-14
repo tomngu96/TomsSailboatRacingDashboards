@@ -35,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -146,16 +147,16 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             }
             // Heel — pinned to right edge, never affects speed position
             val heelAbs = abs(rollDeg)
-            val heelSuffix = if (!imuOk || heelAbs < 1f) "" else if (rollDeg > 0f) "P" else "S"
+            val heelSuffix = if (heelAbs < 1f) "" else if (rollDeg > 0f) "P" else "S"
             Column(
                 modifier = Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp),
                 horizontalAlignment = Alignment.End
             ) {
                 Text(
-                    text = if (imuOk) "%.1f°%s".format(heelAbs, heelSuffix) else "---.-°",
+                    text = "%.1f°%s".format(heelAbs, heelSuffix),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (imuOk) Color(0xFF00CFCF) else Color(0xFF444444),
+                    color = if (imuOk) Color(0xFF00CFCF) else Color(0xFF886600),
                     maxLines = 1,
                     softWrap = false
                 )
@@ -881,6 +882,8 @@ private fun StatusBar(
     phoneGpsActive: Boolean,
     gpsStale: Boolean
 ) {
+    var showImuInitDialog by remember { mutableStateOf(false) }
+
     val imuText = when {
         connected && imuAccuracy >= 1 -> "BT IMU"
         connected                     -> "IMU INIT"
@@ -934,8 +937,24 @@ private fun StatusBar(
                 color = if (connected) Color(0xFF00FF88) else Color(0xFF888888)
             )
         }
-        Text(text = imuText, fontSize = 11.sp, color = imuColor)
+        Text(
+            text = imuText,
+            fontSize = 11.sp,
+            color = imuColor,
+            modifier = if (imuText == "IMU INIT") Modifier.clickable { showImuInitDialog = true } else Modifier
+        )
         Text(text = gpsText, fontSize = 11.sp, color = gpsColor)
+    }
+
+    if (showImuInitDialog) {
+        AlertDialog(
+            onDismissRequest = { showImuInitDialog = false },
+            title = { Text("IMU Calibrating") },
+            text = { Text("The compass hasn't been calibrated yet — values may drift. Move the device in a figure-8 pattern a few times to complete calibration.") },
+            confirmButton = {
+                TextButton(onClick = { showImuInitDialog = false }) { Text("OK") }
+            }
+        )
     }
 }
 
@@ -978,17 +997,17 @@ private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?, imuAccuracy: I
                 Text(
                     text = "↑",
                     fontSize = 40.sp,
-                    color = if (imuOk) PrimaryColor else Color(0xFF555555),
+                    color = if (imuOk) PrimaryColor else Color(0xFF886600),
                     modifier = Modifier.rotate(animatedRotation)
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = if (imuOk) "%.1f°".format(hdgValue) else "---.-°",
+                    text = "%.1f°".format(hdgValue),
                     fontSize = 40.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (imuOk) Color.White else Color(0xFF555555),
+                    color = if (imuOk) Color.White else Color(0xFF886600),
                     maxLines = 1,
                     softWrap = false
                 )
