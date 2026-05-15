@@ -271,7 +271,6 @@ object AppPreferences {
         )
     }
 
-    fun clearSettings(context: Context) {
     fun saveLastBtAddress(context: Context, address: String) {
         prefs(context).edit().putString(KEY_LAST_BT_ADDRESS, address).apply()
     }
@@ -283,7 +282,7 @@ object AppPreferences {
     fun loadLastBtAddress(context: Context): String? =
         prefs(context).getString(KEY_LAST_BT_ADDRESS, null)
 
-    fun resetToDefaults(context: Context) {
+    fun clearSettings(context: Context) {
         prefs(context).edit()
             .remove(KEY_HISTORY_WINDOW)
             .remove(KEY_HEADING_SHORT_WINDOW)
