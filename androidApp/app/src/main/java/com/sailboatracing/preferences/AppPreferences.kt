@@ -35,6 +35,7 @@ object AppPreferences {
     private const val KEY_NTRIP_CASTERS = "ntrip_casters"
     private const val KEY_NTRIP_SELECTED_ID = "ntrip_selected_id"
     private const val KEY_NTRIP_NEXT_ID = "ntrip_next_id"
+    private const val KEY_LAST_BT_ADDRESS = "last_bt_address"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -271,6 +272,18 @@ object AppPreferences {
     }
 
     fun clearSettings(context: Context) {
+    fun saveLastBtAddress(context: Context, address: String) {
+        prefs(context).edit().putString(KEY_LAST_BT_ADDRESS, address).apply()
+    }
+
+    fun clearLastBtAddress(context: Context) {
+        prefs(context).edit().remove(KEY_LAST_BT_ADDRESS).apply()
+    }
+
+    fun loadLastBtAddress(context: Context): String? =
+        prefs(context).getString(KEY_LAST_BT_ADDRESS, null)
+
+    fun resetToDefaults(context: Context) {
         prefs(context).edit()
             .remove(KEY_HISTORY_WINDOW)
             .remove(KEY_HEADING_SHORT_WINDOW)

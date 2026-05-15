@@ -59,6 +59,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private var lastGoodHeading: Float? = null
     private var headingSpikeCount: Int = 0
+    private var intentionalDisconnect: Boolean = false
     // Kept at 3 minutes regardless of the display historyWindowSeconds, so the headed/lifted
     // detector always has enough baseline data.
     private var detectorHistory: List<SensorData> = emptyList()
@@ -90,7 +91,20 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             bluetoothService.connected.collect { connected ->
                 _state.update { it.copy(connected = connected) }
-                if (connected) startNtripIfEnabled() else stopNtrip()
+                if (connected) {
+                    startNtripIfEnabled()
+                } else {
+                    stopNtrip()
+                    if (!intentionalDisconnect) {
+                        val address = AppPreferences.loadLastBtAddress(app.applicationContext)
+                        if (address != null) {
+                            delay(3000L)
+                            if (!bluetoothService.connected.value && !intentionalDisconnect) {
+                                bluetoothService.connect(address, viewModelScope)
+                            }
+                        }
+                    }
+                }
             }
         }
         // GPS staleness check — runs every second and marks GPS stale if no direct fix recently
@@ -191,6 +205,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun connect(address: String) {
+        intentionalDisconnect = false
+        AppPreferences.saveLastBtAddress(app.applicationContext, address)
         // Disable phone sensor fallbacks when switching to hardware
         _state.update { it.copy(usePhoneGps = false, usePhoneImu = false) }
         stopPhoneGps()
@@ -200,6 +216,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        intentionalDisconnect = true
+        AppPreferences.clearLastBtAddress(app.applicationContext)
         bluetoothService.disconnect()
     }
 
