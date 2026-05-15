@@ -16,6 +16,8 @@ import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.location.PhoneGpsService
 import com.sailboatracing.location.PhoneImuService
 import com.sailboatracing.model.DashboardChartType
+import com.sailboatracing.model.DashboardTile
+import com.sailboatracing.model.DEFAULT_DASHBOARD_TILES
 import com.sailboatracing.model.LatLng
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.RaceState
@@ -130,6 +132,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         val startLine = AppPreferences.loadStartLine(ctx)
         val activeMarkIndex = AppPreferences.loadActiveMarkIndex(ctx)
             .coerceIn(0, (marks.size - 1).coerceAtLeast(0))
+        val dashboardTiles = AppPreferences.loadDashboardTiles(ctx) ?: DEFAULT_DASHBOARD_TILES
 
         nextMarkId = loadedNextId
         nextCasterId = settings.ntripNextCasterId
@@ -156,7 +159,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 maxRecordingHours = settings.maxRecordingHours,
                 ntripEnabled = settings.ntripEnabled,
                 ntripCasters = settings.ntripCasters,
-                ntripSelectedCasterId = settings.ntripSelectedCasterId
+                ntripSelectedCasterId = settings.ntripSelectedCasterId,
+                dashboardTiles = dashboardTiles
             )
         }
 
@@ -632,6 +636,34 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             current.copy(dashboardCharts = if (type in charts) charts - type else charts + type)
         }
         saveSettings()
+    }
+
+    fun setDashboardEditMode(editMode: Boolean) {
+        _state.update { it.copy(dashboardEditMode = editMode) }
+    }
+
+    fun addDashboardTile(tile: DashboardTile) {
+        _state.update { it.copy(dashboardTiles = it.dashboardTiles + tile) }
+        AppPreferences.saveDashboardTiles(app.applicationContext, _state.value.dashboardTiles)
+    }
+
+    fun removeDashboardTile(tile: DashboardTile) {
+        _state.update { it.copy(dashboardTiles = it.dashboardTiles - tile) }
+        AppPreferences.saveDashboardTiles(app.applicationContext, _state.value.dashboardTiles)
+    }
+
+    fun moveDashboardTile(tile: DashboardTile, newCol: Int, newRow: Int) {
+        _state.update { current ->
+            current.copy(dashboardTiles = current.dashboardTiles.map {
+                if (it == tile) it.copy(col = newCol, row = newRow) else it
+            })
+        }
+        AppPreferences.saveDashboardTiles(app.applicationContext, _state.value.dashboardTiles)
+    }
+
+    fun resetDashboardLayout() {
+        _state.update { it.copy(dashboardTiles = DEFAULT_DASHBOARD_TILES) }
+        AppPreferences.saveDashboardTiles(app.applicationContext, DEFAULT_DASHBOARD_TILES)
     }
 
     fun setUsePhoneGps(enabled: Boolean) {

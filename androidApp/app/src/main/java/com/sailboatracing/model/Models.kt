@@ -60,6 +60,37 @@ enum class Rounding {
 
 enum class DashboardChartType { SPEED, HEADING, VMG, DIRECTION, ALL }
 
+enum class WidgetType(val label: String) {
+    HEADING("HEADING"),
+    SPEED("SPEED / HEEL"),
+    TREND("TREND"),
+    COURSE_INFO("COURSE INFO"),
+    TIMER("TIMER"),
+    MAP("MAP"),
+    CHART_SPEED("SPEED CHART"),
+    CHART_HEADING("HEADING CHART"),
+    CHART_VMG("VMG CHART"),
+    CHART_DIRECTION("DIRECTION CHART"),
+    CHART_ALL("ALL CHARTS")
+}
+
+data class DashboardTile(
+    val widgetType: WidgetType,
+    val col: Int = 0,
+    val row: Int = 0,
+    val colSpan: Int = 3,
+    val rowSpan: Int = 1
+)
+
+val DEFAULT_DASHBOARD_TILES = listOf(
+    DashboardTile(WidgetType.HEADING,     col = 0, row = 0,  colSpan = 3, rowSpan = 1),
+    DashboardTile(WidgetType.SPEED,       col = 0, row = 1,  colSpan = 3, rowSpan = 2),
+    DashboardTile(WidgetType.TREND,       col = 0, row = 3,  colSpan = 3, rowSpan = 1),
+    DashboardTile(WidgetType.COURSE_INFO, col = 0, row = 4,  colSpan = 3, rowSpan = 1),
+    DashboardTile(WidgetType.TIMER,       col = 0, row = 5,  colSpan = 3, rowSpan = 1),
+    DashboardTile(WidgetType.MAP,         col = 0, row = 6,  colSpan = 3, rowSpan = 5),
+)
+
 data class RaceMark(
     val id: Int,
     val name: String,
@@ -131,6 +162,8 @@ data class RaceState(
     val cogWindowSeconds: Int = 1,
     val historicalCogDeg: Float? = null,
     val dashboardCharts: Set<DashboardChartType> = emptySet(),
+    val dashboardTiles: List<DashboardTile> = DEFAULT_DASHBOARD_TILES,
+    val dashboardEditMode: Boolean = false,
     // Session recording — isRecording/startMs/filePath are runtime only, maxRecordingHours persisted
     val isRecording: Boolean = false,
     val recordingStartMs: Long = 0L,

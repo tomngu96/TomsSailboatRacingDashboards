@@ -1,5 +1,6 @@
 package com.sailboatracing.ui.screens
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
@@ -8,20 +9,25 @@ import android.graphics.Path as AndroidPath
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
+import android.view.WindowManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +35,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,12 +79,15 @@ import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import kotlin.math.abs
 import com.sailboatracing.model.DashboardChartType
+import com.sailboatracing.model.DashboardTile
 import com.sailboatracing.model.HeadingTrend
 import com.sailboatracing.model.RaceMark
+import com.sailboatracing.model.RaceState
 import com.sailboatracing.model.SensorData
 import com.sailboatracing.model.StartLine
 import com.sailboatracing.model.StartLineStatus
 import com.sailboatracing.model.Tack
+import com.sailboatracing.model.WidgetType
 import com.sailboatracing.ui.theme.PrimaryColor
 import com.sailboatracing.viewmodel.RaceViewModel
 import org.osmdroid.config.Configuration
@@ -94,13 +105,21 @@ fun DashboardScreen(viewModel: RaceViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val data = state.latestData
 
+    // Keep screen on while dashboard is visible
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        val window = (view.context as? Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0F))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+            .padding(horizontal = 2.dp, vertical = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         StatusBar(
             connected = state.connected,
@@ -109,15 +128,12 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             rtkStatus = data?.rtkStatus ?: 0,
             phoneImuActive = state.phoneImuActive,
             phoneGpsActive = state.phoneGpsActive,
-            gpsStale = state.gpsStale
+            gpsStale = state.gpsStale,
+            editMode = state.dashboardEditMode,
+            onToggleEditMode = { viewModel.setDashboardEditMode(!state.dashboardEditMode) }
         )
 
-        // IMU heading on left, historical COG on right
-        HeadingRow(
-            hdgValue = data?.heading ?: 0f,
-            historicalCogDeg = state.historicalCogDeg,
-            imuAccuracy = data?.imuAccuracy ?: 0
-        )
+        DashboardGrid(state = state, viewModel = viewModel)
 
         // Speed row — large kts number, heel angle to its right
         val imuOk = (data?.imuAccuracy ?: 0) >= 1
@@ -242,6 +258,360 @@ fun DashboardScreen(viewModel: RaceViewModel) {
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard grid — 3-column tile layout
+// ---------------------------------------------------------------------------
+
+private val GRID_COLS = 3
+private val ROW_HEIGHT = 62.dp
+
+@Composable
+private fun DashboardGrid(state: RaceState, viewModel: RaceViewModel) {
+    val tiles = state.dashboardTiles
+    val editMode = state.dashboardEditMode
+
+    var movingTile by remember { mutableStateOf<DashboardTile?>(null) }
+    var addAtCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    // Cancel move state when edit mode exits or tiles change externally
+    LaunchedEffect(editMode) { if (!editMode) movingTile = null }
+    LaunchedEffect(tiles) { if (movingTile != null && movingTile !in tiles) movingTile = null }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val colW = maxWidth / GRID_COLS
+
+        val occupiedCells: Set<Pair<Int, Int>> = tiles.flatMap { tile ->
+            (tile.col until tile.col + tile.colSpan).flatMap { c ->
+                (tile.row until tile.row + tile.rowSpan).map { r -> c to r }
+            }
+        }.toSet()
+
+        val maxRow = tiles.maxOfOrNull { it.row + it.rowSpan } ?: 0
+        val gridRows = if (editMode) maxRow + 3 else maxRow
+
+        Box(modifier = Modifier.fillMaxWidth().height(ROW_HEIGHT * gridRows)) {
+
+            // Empty cells — only in edit mode
+            if (editMode) {
+                for (r in 0 until gridRows) {
+                    for (c in 0 until GRID_COLS) {
+                        if ((c to r) !in occupiedCells) {
+                            val isDropTarget = movingTile != null
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = colW * c, y = ROW_HEIGHT * r)
+                                    .width(colW)
+                                    .height(ROW_HEIGHT)
+                                    .border(0.5.dp, Color(0xFF2A2A3A))
+                                    .clickable {
+                                        val mv = movingTile
+                                        if (mv != null) {
+                                            viewModel.moveDashboardTile(mv, c, r)
+                                            movingTile = null
+                                        } else {
+                                            addAtCell = c to r
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isDropTarget) "⬇" else "+",
+                                    color = if (isDropTarget) Color(0xFF00FF88) else Color(0xFF444444),
+                                    fontSize = if (isDropTarget) 18.sp else 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Tiles
+            tiles.forEach { tile ->
+                val isMoving = tile == movingTile
+                Box(
+                    modifier = Modifier
+                        .offset(x = colW * tile.col, y = ROW_HEIGHT * tile.row)
+                        .width(colW * tile.colSpan)
+                        .height(ROW_HEIGHT * tile.rowSpan)
+                        .border(
+                            1.dp,
+                            if (editMode && isMoving) Color(0xFF00FF88)
+                            else if (editMode) Color(0xFF2A2A4A)
+                            else Color(0xFF1E1E2A)
+                        )
+                        .then(
+                            if (editMode && isMoving) Modifier.background(Color(0x2200FF88))
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!editMode) {
+                        WidgetContent(tile = tile, state = state, viewModel = viewModel)
+                    } else {
+                        // In edit mode: dim content, show label, tap tile to select for move
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(tile, movingTile) {
+                                    detectTapGestures { movingTile = if (isMoving) null else tile }
+                                }
+                        ) {
+                            WidgetContent(tile = tile, state = state, viewModel = viewModel)
+                            // Dim overlay
+                            Box(modifier = Modifier.fillMaxSize().background(Color(0x88000000)))
+                            // Widget label
+                            Text(
+                                text = tile.widgetType.label,
+                                color = Color(0xDDFFFFFF),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                            // Remove button — pointerInput so it doesn't bubble to tile tap
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .size(22.dp)
+                                    .background(Color(0xCC330000), CircleShape)
+                                    .pointerInput(tile) {
+                                        detectTapGestures { viewModel.removeDashboardTile(tile) }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("✕", color = Color(0xFFFF6666), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            // Move indicator when selected
+                            if (isMoving) {
+                                Text(
+                                    text = "TAP ⬇ TO PLACE",
+                                    color = Color(0xFF00FF88),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add tile dialog — shown when a + cell is tapped
+    val cell = addAtCell
+    if (cell != null) {
+        AddTileDialog(
+            onDismiss = { addAtCell = null },
+            onAdd = { widgetType, colSpan, rowSpan ->
+                viewModel.addDashboardTile(
+                    DashboardTile(
+                        widgetType = widgetType,
+                        col = cell.first,
+                        row = cell.second,
+                        colSpan = colSpan,
+                        rowSpan = rowSpan
+                    )
+                )
+                addAtCell = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun WidgetContent(tile: DashboardTile, state: RaceState, viewModel: RaceViewModel) {
+    val data = state.latestData
+    when (tile.widgetType) {
+        WidgetType.HEADING -> HeadingRow(
+            hdgValue = data?.heading ?: 0f,
+            historicalCogDeg = state.historicalCogDeg,
+            imuAccuracy = data?.imuAccuracy ?: 0
+        )
+        WidgetType.SPEED -> SpeedHeelWidget(data = data)
+        WidgetType.TREND -> HeadedLiftedBanner(
+            trend = state.headingTrend,
+            trendDegrees = state.trendDegrees,
+            tack = state.tack,
+            onToggleTack = { viewModel.setTack(if (state.tack == Tack.STARBOARD) Tack.PORT else Tack.STARBOARD) }
+        )
+        WidgetType.COURSE_INFO -> {
+            val ts = state.timerState
+            CourseInfoCard(
+                startLineStatus = state.startLineStatus,
+                marks = state.marks,
+                activeMarkIndex = state.activeMarkIndex,
+                vmgKts = state.vmgKts,
+                distToMarkNm = state.distToMarkNm,
+                bearingToMarkDeg = state.bearingToMarkDeg,
+                timerRemainingSeconds = if (ts.running) ts.remainingMs / 1000f else null,
+                onSetActiveMark = { viewModel.setActiveMark(it) }
+            )
+        }
+        WidgetType.TIMER -> TimerDisplay(timerState = state.timerState)
+        WidgetType.MAP -> RaceMap(
+            viewModel = viewModel,
+            latestData = state.latestData,
+            startLine = state.startLine,
+            marks = state.marks,
+            activeMarkIndex = state.activeMarkIndex,
+            trailHistory = state.trailHistory,
+            showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
+            historicalCogDeg = state.historicalCogDeg,
+            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
+        )
+        WidgetType.CHART_SPEED ->
+            if (state.history.isNotEmpty()) DashboardInlineChart(state.history, DashboardChartType.SPEED)
+        WidgetType.CHART_HEADING ->
+            if (state.history.isNotEmpty()) DashboardInlineChart(state.history, DashboardChartType.HEADING)
+        WidgetType.CHART_VMG ->
+            if (state.history.isNotEmpty()) DashboardInlineChart(state.history, DashboardChartType.VMG)
+        WidgetType.CHART_DIRECTION ->
+            if (state.history.isNotEmpty()) DashboardDirectionCard(state.history)
+        WidgetType.CHART_ALL ->
+            if (state.history.isNotEmpty()) DashboardAllCard(state.history)
+    }
+}
+
+@Composable
+private fun SpeedHeelWidget(data: SensorData?) {
+    val imuOk = (data?.imuAccuracy ?: 0) >= 1
+    val rollDeg = data?.roll ?: 0f
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
+                fontSize = 80.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                lineHeight = 70.sp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "kts",
+                fontSize = 20.sp,
+                color = Color(0xFF888888),
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+        val heelAbs = abs(rollDeg)
+        val heelSuffix = if (!imuOk || heelAbs < 1f) "" else if (rollDeg > 0f) "P" else "S"
+        Column(
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp, bottom = 6.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                text = if (imuOk) "%.1f°%s".format(heelAbs, heelSuffix) else "---.-°",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (imuOk) Color(0xFF00CFCF) else Color(0xFF444444),
+                maxLines = 1,
+                softWrap = false
+            )
+            Text(text = "HEEL", fontSize = 11.sp, color = Color(0xFF666666))
+        }
+    }
+}
+
+@Composable
+private fun AddTileDialog(
+    onDismiss: () -> Unit,
+    onAdd: (WidgetType, Int, Int) -> Unit
+) {
+    var selectedType by remember { mutableStateOf(WidgetType.MAP) }
+    var colSpan by remember { mutableIntStateOf(3) }
+    var rowSpan by remember { mutableIntStateOf(defaultRowSpan(WidgetType.MAP)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1A1A2E),
+        title = { Text("Add Widget", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Widget type", fontSize = 11.sp, color = Color(0xFF888888))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    WidgetType.entries.forEach { type ->
+                        val selected = type == selectedType
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (selected) Color(0xFF2A2A5A) else Color(0xFF111122),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable {
+                                    selectedType = type
+                                    rowSpan = defaultRowSpan(type)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(type.label, color = if (selected) PrimaryColor else Color(0xFFAAAAAA), fontSize = 13.sp)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column {
+                        Text("Columns (${colSpan})", fontSize = 11.sp, color = Color(0xFF888888))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(1, 2, 3).forEach { n ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(
+                                            if (colSpan == n) PrimaryColor else Color(0xFF2A2A3A),
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .clickable { colSpan = n },
+                                    contentAlignment = Alignment.Center
+                                ) { Text("$n", color = Color.White, fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                    Column {
+                        Text("Rows (${rowSpan})", fontSize = 11.sp, color = Color(0xFF888888))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(1, 2, 3, 5).forEach { n ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(
+                                            if (rowSpan == n) PrimaryColor else Color(0xFF2A2A3A),
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .clickable { rowSpan = n },
+                                    contentAlignment = Alignment.Center
+                                ) { Text("$n", color = Color.White, fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onAdd(selectedType, colSpan, rowSpan) },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor)
+            ) { Text("Add") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = Color(0xFF888888)) }
+        }
+    )
+}
+
+private fun defaultRowSpan(type: WidgetType) = when (type) {
+    WidgetType.HEADING     -> 2
+    WidgetType.SPEED       -> 2
+    WidgetType.TREND       -> 1
+    WidgetType.COURSE_INFO -> 2
+    WidgetType.TIMER       -> 1
+    WidgetType.MAP         -> 5
+    else                   -> 3
+}
+
+// ---------------------------------------------------------------------------
 // Course info card — swipeable: start line → mark[0] → mark[1] → …
 // ---------------------------------------------------------------------------
 
@@ -311,8 +681,8 @@ private fun CourseInfoCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (hasStartLine && pageIndex == 0 && startLineStatus != null) {
                 // ── Start line page ──
@@ -880,7 +1250,9 @@ private fun StatusBar(
     rtkStatus: Int,
     phoneImuActive: Boolean,
     phoneGpsActive: Boolean,
-    gpsStale: Boolean
+    gpsStale: Boolean,
+    editMode: Boolean = false,
+    onToggleEditMode: () -> Unit = {}
 ) {
     var showImuInitDialog by remember { mutableStateOf(false) }
 
@@ -944,6 +1316,14 @@ private fun StatusBar(
             modifier = if (imuText == "IMU INIT") Modifier.clickable { showImuInitDialog = true } else Modifier
         )
         Text(text = gpsText, fontSize = 11.sp, color = gpsColor)
+        // Edit mode toggle
+        Text(
+            text = if (editMode) "🔓" else "🔒",
+            fontSize = 16.sp,
+            modifier = Modifier
+                .clickable { onToggleEditMode() }
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
     }
 
     if (showImuInitDialog) {
@@ -983,7 +1363,7 @@ private fun HeadingRow(hdgValue: Float, historicalCogDeg: Float?, imuAccuracy: I
     )
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(vertical = 0.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left: Arrow pinned to far left, followed by HDG
@@ -1076,28 +1456,23 @@ private fun HeadedLiftedBanner(
         HeadingTrend.HEADED_STRONG -> "▼ HEADED (%.1f°)".format(trendDegrees)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = bannerColor),
-        shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bannerColor)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Text(text = trendLabel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = trendTextColor)
+        Text(
+            text = if (tack == Tack.STARBOARD) "STBD" else "PORT",
+            fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            color = if (tack == Tack.STARBOARD) PrimaryColor else Color(0xFFFFAB40),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 0.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = trendLabel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = trendTextColor)
-            Text(
-                text = if (tack == Tack.STARBOARD) "STBD" else "PORT",
-                fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                color = if (tack == Tack.STARBOARD) PrimaryColor else Color(0xFFFFAB40),
-                modifier = Modifier
-                    .clickable { onToggleTack() }
-                    .padding(vertical = 6.dp, horizontal = 4.dp)
-            )
-        }
+                .clickable { onToggleTack() }
+                .padding(vertical = 4.dp, horizontal = 4.dp)
+        )
     }
 }
 
@@ -1117,21 +1492,15 @@ private fun TimerDisplay(timerState: com.sailboatracing.model.TimerState) {
         remaining <= 60_000L -> Color(0xFFFFAB40)
         else                 -> PrimaryColor
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
-        shape = RoundedCornerShape(8.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = "RACE TIMER", fontSize = 10.sp, color = Color(0xFF888888))
-            Text(
-                text = if (timerState.finished) "START!" else "%d:%02d.%d".format(minutes, seconds, tenths),
-                fontSize = 36.sp, fontWeight = FontWeight.Bold, color = urgencyColor
-            )
-        }
+        Text(text = "RACE TIMER", fontSize = 10.sp, color = Color(0xFF888888))
+        Text(
+            text = if (timerState.finished) "START!" else "%d:%02d.%d".format(minutes, seconds, tenths),
+            fontSize = 36.sp, fontWeight = FontWeight.Bold, color = urgencyColor
+        )
     }
 }
 

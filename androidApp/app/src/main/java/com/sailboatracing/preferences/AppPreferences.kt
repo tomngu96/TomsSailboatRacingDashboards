@@ -2,11 +2,14 @@ package com.sailboatracing.preferences
 
 import android.content.Context
 import com.sailboatracing.model.DashboardChartType
+import com.sailboatracing.model.DashboardTile
+import com.sailboatracing.model.DEFAULT_DASHBOARD_TILES
 import com.sailboatracing.model.LatLng
 import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.Rounding
 import com.sailboatracing.model.StartLine
+import com.sailboatracing.model.WidgetType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -36,6 +39,7 @@ object AppPreferences {
     private const val KEY_NTRIP_SELECTED_ID = "ntrip_selected_id"
     private const val KEY_NTRIP_NEXT_ID = "ntrip_next_id"
     private const val KEY_LAST_BT_ADDRESS = "last_bt_address"
+    private const val KEY_DASHBOARD_TILES = "dashboard_tiles"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -271,7 +275,37 @@ object AppPreferences {
         )
     }
 
-    fun clearSettings(context: Context) {
+    fun saveDashboardTiles(context: Context, tiles: List<DashboardTile>) {
+        val arr = JSONArray()
+        tiles.forEach { tile ->
+            arr.put(JSONObject().apply {
+                put("type", tile.widgetType.name)
+                put("col", tile.col)
+                put("row", tile.row)
+                put("colSpan", tile.colSpan)
+                put("rowSpan", tile.rowSpan)
+            })
+        }
+        prefs(context).edit().putString(KEY_DASHBOARD_TILES, arr.toString()).apply()
+    }
+
+    fun loadDashboardTiles(context: Context): List<DashboardTile>? {
+        val json = prefs(context).getString(KEY_DASHBOARD_TILES, null) ?: return null
+        return try {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                DashboardTile(
+                    widgetType = WidgetType.valueOf(o.getString("type")),
+                    col = o.getInt("col"),
+                    row = o.getInt("row"),
+                    colSpan = o.getInt("colSpan"),
+                    rowSpan = o.getInt("rowSpan")
+                )
+            }
+        } catch (_: Exception) { null }
+    }
+
     fun saveLastBtAddress(context: Context, address: String) {
         prefs(context).edit().putString(KEY_LAST_BT_ADDRESS, address).apply()
     }
@@ -283,7 +317,7 @@ object AppPreferences {
     fun loadLastBtAddress(context: Context): String? =
         prefs(context).getString(KEY_LAST_BT_ADDRESS, null)
 
-    fun resetToDefaults(context: Context) {
+    fun clearSettings(context: Context) {
         prefs(context).edit()
             .remove(KEY_HISTORY_WINDOW)
             .remove(KEY_HEADING_SHORT_WINDOW)
