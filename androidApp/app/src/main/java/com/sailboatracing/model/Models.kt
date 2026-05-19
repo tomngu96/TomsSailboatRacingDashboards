@@ -136,11 +136,14 @@ data class RaceState(
     val recordingStartMs: Long = 0L,
     val recordingFilePath: String = "",
     val maxRecordingHours: Int = 24,
-    // NTRIP — settings persisted, runtime fields (ntripConnected/Auto*) are not persisted
+    // NTRIP — settings persisted, runtime fields (ntripConnected/Auto*/RetryCount) are not persisted
     val ntripEnabled: Boolean = true,
     val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
     val ntripSelectedCasterId: Int = 0,
     val ntripConnected: Boolean = false,
+    // Number of reconnect attempts since last successful connection (0 = never tried yet / just started).
+    // Used to distinguish "initial connecting…" from "failed, retrying — GPS still active".
+    val ntripRetryCount: Int = 0,
     // Auto-select state (populated at connect time when mountpoint is blank)
     val ntripAutoMountpoint: String = "",
     val ntripNearbyMountpoints: List<String> = emptyList(),

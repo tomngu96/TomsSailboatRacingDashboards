@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:\\\\Users\\\\usern\\\\OneDrive\\\\Documents\\\\TomsSailboatRacingDashboards\" -type f \\\\\\( -name \"*.h\" -o -name \"*.hpp\" -o -name \"*.c\" \\\\\\))",
+      "Bash(mkdir \"C:\\\\Users\\\\usern\\\\OneDrive\\\\Documents\\\\TomsSailboatRacingDashboards\\\\arduino\\\\f9p_set_baud\")",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.sparkfun.com)"
+    ]
+  }
+}

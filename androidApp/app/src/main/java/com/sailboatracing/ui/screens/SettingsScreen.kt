@@ -164,11 +164,14 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                             state.ntripConnected -> "Connected — corrections flowing"
                             state.connected && selectedCaster?.mountpoint.isNullOrBlank() && state.ntripAutoMountpoint.isEmpty() ->
                                 "Resolving nearest mountpoint…"
-                            state.connected -> "Enabled — connecting…"
+                            state.connected && state.ntripRetryCount > 0 ->
+                                "No RTCM — GPS active (standard accuracy, retrying…)"
+                            state.connected -> "Connecting…"
                             else -> "Enabled — starts automatically on Bluetooth connect"
                         }
                         val statusColor = when {
                             state.ntripConnected -> Color(0xFF4CAF50)
+                            state.connected && state.ntripRetryCount > 0 -> Color(0xFFEF5350) // red-ish — degraded
                             state.ntripEnabled -> Color(0xFFFFAB40)
                             else -> Color(0xFF888888)
                         }

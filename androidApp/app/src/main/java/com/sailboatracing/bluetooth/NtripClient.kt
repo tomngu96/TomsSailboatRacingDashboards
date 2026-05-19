@@ -76,6 +76,11 @@ object NtripClient {
     /**
      * Connects to an NTRIP caster and emits RTCM3 binary chunks.
      *
+     * [positionProvider] is called periodically to obtain the rover's current (lat, lon).
+     * A NMEA GGA sentence is sent to the caster every 5 s so the connection stays alive —
+     * most casters (especially VRS) close the stream after ~30 s without a position report.
+     * An initial GGA is also sent immediately after the HTTP handshake.
+     *
      * Fails silently (empty flow) if there is no internet, the host is unreachable,
      * or authentication fails — the caller should treat no emissions as "no corrections".
      */
@@ -84,7 +89,8 @@ object NtripClient {
         port: Int,
         mountpoint: String,
         username: String,
-        password: String
+        password: String,
+        positionProvider: (() -> Pair<Double, Double>?)? = null
     ): Flow<ByteArray> = flow {
         val socket = try {
             Socket(host, port).apply { soTimeout = 10_000 }
@@ -98,7 +104,7 @@ object NtripClient {
             val request = "GET /$mountpoint HTTP/1.0\r\n" +
                 "Host: $host:$port\r\n" +
                 "User-Agent: NTRIP SailRacing/1.0\r\n" +
-
+                "Ntrip-Version: Ntrip/1.0\r\n" +
                 "Authorization: Basic $credentials\r\n" +
                 "Accept: */*\r\n" +
                 "\r\n"
@@ -125,12 +131,33 @@ object NtripClient {
             if (state < 4) return@flow  // timed out reading headers
             if (!header.contains("200")) return@flow  // auth failure or error
 
-            // Stream RTCM binary chunks
+            val out = socket.getOutputStream()
+
+            // Send GGA immediately — VRS casters need rover position before sending corrections.
+            positionProvider?.invoke()?.let { (lat, lon) ->
+                try { out.write(buildNmeaGga(lat, lon).toByteArray(Charsets.US_ASCII)); out.flush() }
+                catch (_: Exception) {}
+            }
+
+            // Stream RTCM binary chunks, refreshing GGA every 5 s to keep caster alive.
+            // SocketTimeoutException means no data arrived — loop back and possibly send GGA
+            // rather than breaking the connection (RTCM is bursty; gaps >5 s are normal).
             socket.soTimeout = 5_000
             val buffer = ByteArray(4096)
+            var lastGgaSentMs = System.currentTimeMillis()
             while (currentCoroutineContext().isActive) {
+                val now = System.currentTimeMillis()
+                if (now - lastGgaSentMs >= 5_000L) {
+                    positionProvider?.invoke()?.let { (lat, lon) ->
+                        try { out.write(buildNmeaGga(lat, lon).toByteArray(Charsets.US_ASCII)); out.flush() }
+                        catch (_: Exception) {}
+                    }
+                    lastGgaSentMs = now
+                }
                 val n = try {
                     input.read(buffer)
+                } catch (_: java.net.SocketTimeoutException) {
+                    continue   // no RTCM data yet — loop back, maybe send GGA
                 } catch (_: Exception) {
                     break
                 }
@@ -141,4 +168,31 @@ object NtripClient {
             try { socket.close() } catch (_: Exception) {}
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Builds a minimal NMEA GGA sentence for the given position.
+     * Checksum is XOR of all bytes between $ and * (NMEA convention).
+     */
+    private fun buildNmeaGga(lat: Double, lon: Double): String {
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        val time = String.format(java.util.Locale.US, "%02d%02d%02d.00",
+            cal.get(java.util.Calendar.HOUR_OF_DAY),
+            cal.get(java.util.Calendar.MINUTE),
+            cal.get(java.util.Calendar.SECOND))
+        val absLat = Math.abs(lat)
+        val latDeg = absLat.toInt()
+        val latMin = (absLat - latDeg) * 60.0
+        val latHemi = if (lat >= 0.0) "N" else "S"
+        val absLon = Math.abs(lon)
+        val lonDeg = absLon.toInt()
+        val lonMin = (absLon - lonDeg) * 60.0
+        val lonHemi = if (lon >= 0.0) "E" else "W"
+        // DDMM.MMMMM for lat (02d + 08.5f = 10 chars), DDDMM.MMMMM for lon (03d + 08.5f = 11 chars)
+        val body = String.format(java.util.Locale.US,
+            "GPGGA,%s,%02d%08.5f,%s,%03d%08.5f,%s,1,08,1.0,0.0,M,0.0,M,,",
+            time, latDeg, latMin, latHemi, lonDeg, lonMin, lonHemi)
+        var cs = 0
+        for (c in body) cs = cs xor c.code
+        return "\$${body}*${String.format(java.util.Locale.US, "%02X", cs)}\r\n"
+    }
 }

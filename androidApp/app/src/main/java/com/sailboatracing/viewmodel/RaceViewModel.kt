@@ -26,6 +26,7 @@ import com.sailboatracing.model.Tack
 import com.sailboatracing.model.TimerState
 import com.sailboatracing.preferences.AppPreferences
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -753,7 +754,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         // Auto-select: fetch source table, rank by distance, start streaming nearest
         ntripJob?.cancel()
         ntripJob = viewModelScope.launch {
-            _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = "") }
+            _state.update { it.copy(ntripConnected = false, ntripRetryCount = 0, ntripAutoMountpoint = "") }
             val entries = NtripClient.fetchSourceTable(caster.host, caster.port)
             val free = entries.filter { it.fee == "N" }
             if (free.isEmpty()) return@launch
@@ -767,16 +768,24 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             _state.update {
                 it.copy(ntripNearbyMountpoints = ranked, ntripAutoMountpointIndex = index, ntripAutoMountpoint = mount)
             }
-            try {
-                NtripClient.stream(caster.host, caster.port, mount, caster.username, caster.password)
-                    .collect { bytes ->
-                        if (_state.value.connected) {
-                            bluetoothService.sendBytes(bytes)
-                            if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true) }
+            val posProvider = { _state.value.latestData?.takeIf { it.fixType >= 2 }?.let { Pair(it.lat, it.lon) } }
+            while (isActive) {
+                try {
+                    NtripClient.stream(caster.host, caster.port, mount, caster.username, caster.password, posProvider)
+                        .collect { bytes ->
+                            if (_state.value.connected) {
+                                bluetoothService.sendBytes(bytes)
+                                // Reset retry count on first successful data — stream is live
+                                if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true, ntripRetryCount = 0) }
+                            }
                         }
-                    }
-            } finally {
-                _state.update { it.copy(ntripConnected = false) }
+                } catch (_: Exception) {
+                    // stream threw — fall through to retry
+                } finally {
+                    _state.update { it.copy(ntripConnected = false, ntripRetryCount = it.ntripRetryCount + 1) }
+                }
+                if (!isActive) break
+                delay(5_000L)   // brief pause before reconnect
             }
         }
     }
@@ -785,17 +794,25 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private fun launchNtripStream(caster: NtripCaster, mountpoint: String) {
         ntripJob?.cancel()
         ntripJob = viewModelScope.launch {
-            _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = mountpoint) }
-            try {
-                NtripClient.stream(caster.host, caster.port, mountpoint, caster.username, caster.password)
-                    .collect { bytes ->
-                        if (_state.value.connected) {
-                            bluetoothService.sendBytes(bytes)
-                            if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true) }
+            _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = mountpoint, ntripRetryCount = 0) }
+            val posProvider = { _state.value.latestData?.takeIf { it.fixType >= 2 }?.let { Pair(it.lat, it.lon) } }
+            while (isActive) {
+                try {
+                    NtripClient.stream(caster.host, caster.port, mountpoint, caster.username, caster.password, posProvider)
+                        .collect { bytes ->
+                            if (_state.value.connected) {
+                                bluetoothService.sendBytes(bytes)
+                                // Reset retry count on first successful data — stream is live
+                                if (!_state.value.ntripConnected) _state.update { it.copy(ntripConnected = true, ntripRetryCount = 0) }
+                            }
                         }
-                    }
-            } finally {
-                _state.update { it.copy(ntripConnected = false) }
+                } catch (_: Exception) {
+                    // stream threw — fall through to retry
+                } finally {
+                    _state.update { it.copy(ntripConnected = false, ntripRetryCount = it.ntripRetryCount + 1) }
+                }
+                if (!isActive) break
+                delay(5_000L)   // brief pause before reconnect
             }
         }
     }
@@ -804,7 +821,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         ntripJob?.cancel()
         ntripJob = null
         _state.update {
-            it.copy(ntripConnected = false, ntripAutoMountpoint = "", ntripNearbyMountpoints = emptyList(), ntripAutoMountpointIndex = 0)
+            it.copy(ntripConnected = false, ntripRetryCount = 0, ntripAutoMountpoint = "", ntripNearbyMountpoints = emptyList(), ntripAutoMountpointIndex = 0)
         }
     }
 
