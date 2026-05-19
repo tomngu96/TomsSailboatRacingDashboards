@@ -2,6 +2,30 @@ package com.sailboatracing.model
 
 data class LatLng(val latitude: Double, val longitude: Double)
 
+// ── Session replay ─────────────────────────────────────────────────────────
+
+data class ReplayFrame(
+    val timestampMs: Long,
+    val heading:     Float,
+    val pitch:       Float,
+    val roll:        Float,
+    val lat:         Double,
+    val lon:         Double,
+    val sogKts:      Float,
+    val cogDeg:      Float,
+    val fixType:     Int,
+    val rtkStatus:   Int
+)
+
+data class SessionMeta(
+    val filePath:        String,
+    val fileName:        String,
+    val date:            String,   // display string, e.g. "15 Jan 2024  14:30"
+    val durationMinutes: Int,
+    val pointCount:      Int,
+    val fileSizeKb:      Long
+)
+
 data class NtripCaster(
     val id: Int,
     val name: String,
