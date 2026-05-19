@@ -191,7 +191,10 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                 Text(
                     text = "Forwards RTCM3 correction data from a free NTRIP caster over Bluetooth " +
                         "to the ZED-F9P for centimeter-level RTK accuracy. Silently skipped if no internet " +
-                        "is available — the GPS keeps running at standard accuracy.",
+                        "is available — the GPS keeps running at standard accuracy.\n\n" +
+                        "Connecting typically takes 5–15 s. The status may flash between red and green " +
+                        "while it negotiates — this is normal. Once steady green, corrections are flowing " +
+                        "and RTK will begin converging (see the GPS status indicator on the dashboard).",
                     color = Color(0xFF666666),
                     fontSize = 11.sp,
                     lineHeight = 16.sp

@@ -974,6 +974,13 @@ private fun StatusBar(
                         "2D fix only — altitude unreliable. Horizontal accuracy ~5–10 m.")
                     GpsStatusRow("NO FIX", Color(0xFFFF4444),
                         "Hardware GPS connected but no satellite fix yet. Move to open sky.")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "RTK convergence: once RTCM corrections are flowing steadily, expect GPS 3D → RTK FLOAT in 30 s–2 min, then RTK FLOAT → RTK FIXED in a further 1–5 min. Any gap in corrections resets the clock — continuous signal is key.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = Color(0xFF888888)
+                    )
                 }
             },
             confirmButton = {
