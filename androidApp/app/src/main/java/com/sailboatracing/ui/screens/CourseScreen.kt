@@ -236,6 +236,54 @@ private fun StartLineTab(
             )
         }
 
+        // ── Draw from heading ──────────────────────────────────────────────
+        val imuCalibrated = (state.latestData?.imuAccuracy ?: 0) >= 1
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1A22)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "DRAW LINE FROM HEADING",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4488CC)
+                )
+                Text(
+                    text = "Sail along the start line. Your current position and heading define the line bearing. " +
+                           "Tentative endpoints are placed ±250 m along your heading — re-mark individual ends afterwards if needed.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF777777),
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = { viewModel.setStartLineFromHeading() },
+                    enabled = hasRecentGpsFix && imuCalibrated,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1A3A55),
+                        contentColor = Color(0xFF66BBFF),
+                        disabledContainerColor = Color(0xFF1A1A2E),
+                        disabledContentColor = Color(0xFF444466)
+                    )
+                ) {
+                    Text(
+                        text = if (!imuCalibrated) "⚠ IMU NOT CALIBRATED"
+                               else if (!hasRecentGpsFix) "⚠ NO GPS FIX"
+                               else "↑  SET LINE FROM CURRENT HEADING",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
         if (line != null) {
             OutlinedButton(
                 onClick = { viewModel.clearStartLine() },

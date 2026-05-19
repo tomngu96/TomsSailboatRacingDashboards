@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -454,6 +455,42 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             }
         }
         saveStartLine()
+    }
+
+    /**
+     * Sets the start line from the boat's current position and IMU heading, treating the
+     * heading as the line bearing. Projects ±250 m along that bearing to create tentative
+     * pin (forward) and boat-end (backward) positions. The user can re-mark individual ends
+     * afterwards if needed.
+     */
+    fun setStartLineFromHeading() {
+        val st = _state.value
+        val data = st.latestData ?: return
+        if (data.imuAccuracy < 1) return          // need a calibrated heading
+        if (st.gpsStale || st.lastGpsFixMs == 0L) return
+        val bearing = data.heading.toDouble()
+        val pin  = projectLatLon(data.lat, data.lon, bearing,               250.0) // forward
+        val boat = projectLatLon(data.lat, data.lon, (bearing + 180.0) % 360.0, 250.0) // backward
+        _state.update { current ->
+            current.copy(
+                startLine = StartLine(pin = pin, boat = boat),
+                pendingStartPin  = null,
+                pendingStartBoat = null
+            )
+        }
+        saveStartLine()
+    }
+
+    /** Destination point given start lat/lon, bearing (°true), distance (m) — WGS-84 sphere. */
+    private fun projectLatLon(lat: Double, lon: Double, bearingDeg: Double, distanceM: Double): LatLng {
+        val R = 6_371_000.0
+        val d = distanceM / R
+        val lat1 = Math.toRadians(lat)
+        val lon1 = Math.toRadians(lon)
+        val brng = Math.toRadians(bearingDeg)
+        val lat2 = asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(brng))
+        val lon2 = lon1 + atan2(sin(brng) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2))
+        return LatLng(Math.toDegrees(lat2), Math.toDegrees(lon2))
     }
 
     fun clearStartLine() {
