@@ -768,7 +768,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             _state.update {
                 it.copy(ntripNearbyMountpoints = ranked, ntripAutoMountpointIndex = index, ntripAutoMountpoint = mount)
             }
-            val posProvider = { _state.value.latestData?.takeIf { it.fixType >= 2 }?.let { Pair(it.lat, it.lon) } }
+            val posProvider = { _state.value.latestData?.let { d -> if (d.lat != 0.0 || d.lon != 0.0) Pair(d.lat, d.lon) else null } }
             while (isActive) {
                 try {
                     NtripClient.stream(caster.host, caster.port, mount, caster.username, caster.password, posProvider)
@@ -795,7 +795,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         ntripJob?.cancel()
         ntripJob = viewModelScope.launch {
             _state.update { it.copy(ntripConnected = false, ntripAutoMountpoint = mountpoint, ntripRetryCount = 0) }
-            val posProvider = { _state.value.latestData?.takeIf { it.fixType >= 2 }?.let { Pair(it.lat, it.lon) } }
+            val posProvider = { _state.value.latestData?.let { d -> if (d.lat != 0.0 || d.lon != 0.0) Pair(d.lat, d.lon) else null } }
             while (isActive) {
                 try {
                     NtripClient.stream(caster.host, caster.port, mountpoint, caster.username, caster.password, posProvider)

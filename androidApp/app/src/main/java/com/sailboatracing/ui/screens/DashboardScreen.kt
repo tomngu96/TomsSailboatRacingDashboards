@@ -883,6 +883,7 @@ private fun StatusBar(
     gpsStale: Boolean
 ) {
     var showImuInitDialog by remember { mutableStateOf(false) }
+    var showGpsInfoDialog by remember { mutableStateOf(false) }
 
     val imuText = when {
         connected && imuAccuracy >= 1 -> "BT IMU"
@@ -943,7 +944,42 @@ private fun StatusBar(
             color = imuColor,
             modifier = if (imuText == "IMU INIT") Modifier.clickable { showImuInitDialog = true } else Modifier
         )
-        Text(text = gpsText, fontSize = 11.sp, color = gpsColor)
+        Text(
+            text = gpsText,
+            fontSize = 11.sp,
+            color = gpsColor,
+            modifier = Modifier.clickable { showGpsInfoDialog = true }
+        )
+    }
+
+    if (showGpsInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpsInfoDialog = false },
+            title = { Text("GPS Status") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Current: $gpsText",
+                        color = gpsColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    GpsStatusRow("RTK FIXED", Color(0xFF00CFFF),
+                        "Centimetre accuracy (~1–2 cm). RTCM corrections are locked. Best possible position for racing.")
+                    GpsStatusRow("RTK FLOAT", Color(0xFF88AAFF),
+                        "Decimetre accuracy (~10–30 cm). Corrections flowing but not yet fully converged. Improves to FIXED within 30–60 s.")
+                    GpsStatusRow("GPS 3D", Color(0xFF00FF88),
+                        "Standard 3D GPS fix (~1–3 m). No RTK corrections active.")
+                    GpsStatusRow("GPS 2D", Color(0xFFFFAB40),
+                        "2D fix only — altitude unreliable. Horizontal accuracy ~5–10 m.")
+                    GpsStatusRow("NO FIX", Color(0xFFFF4444),
+                        "Hardware GPS connected but no satellite fix yet. Move to open sky.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGpsInfoDialog = false }) { Text("OK") }
+            }
+        )
     }
 
     if (showImuInitDialog) {
@@ -955,6 +991,24 @@ private fun StatusBar(
                 TextButton(onClick = { showImuInitDialog = false }) { Text("OK") }
             }
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GPS info dialog helper
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun GpsStatusRow(label: String, color: Color, description: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = color,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(84.dp)
+        )
+        Text(text = description, fontSize = 12.sp, color = Color(0xFFCCCCCC))
     }
 }
 
