@@ -33,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import com.sailboatracing.ui.screens.ChartsScreen
 import com.sailboatracing.ui.screens.CourseScreen
 import com.sailboatracing.ui.screens.DashboardScreen
+import com.sailboatracing.ui.screens.OfflineMapsScreen
 import com.sailboatracing.ui.screens.SettingsScreen
 import com.sailboatracing.ui.screens.TimerSetupScreen
 import com.sailboatracing.ui.theme.PrimaryColor
@@ -64,6 +65,8 @@ fun NavGraph(viewModel: RaceViewModel) {
     Scaffold(
         containerColor = Color(0xFF0A0A0F),
         bottomBar = {
+            val showBottomBar = currentDestination?.route != "offline_maps"
+            if (!showBottomBar) return@Scaffold
             NavigationBar(
                 containerColor = SurfaceColor,
                 modifier = Modifier.height(48.dp),
@@ -128,7 +131,14 @@ fun NavGraph(viewModel: RaceViewModel) {
                 ChartsScreen(viewModel = viewModel)
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(viewModel = viewModel)
+                SettingsScreen(viewModel = viewModel, onOpenOfflineMaps = {
+                    navController.navigate("offline_maps")
+                })
+            }
+            composable("offline_maps") {
+                OfflineMapsScreen(viewModel = viewModel, onBack = {
+                    navController.popBackStack()
+                })
             }
         }
     }

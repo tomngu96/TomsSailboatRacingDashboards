@@ -54,7 +54,7 @@ import com.sailboatracing.ui.theme.PrimaryColor
 import com.sailboatracing.viewmodel.RaceViewModel
 
 @Composable
-fun SettingsScreen(viewModel: RaceViewModel) {
+fun SettingsScreen(viewModel: RaceViewModel, onOpenOfflineMaps: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showResetConfirm by remember { mutableStateOf(false) }
 
@@ -722,6 +722,33 @@ fun SettingsScreen(viewModel: RaceViewModel) {
                         uncheckedTrackColor = Color(0xFF333333)
                     )
                 )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF222222))
+
+        // ── Offline Maps ───────────────────────────────────────────────
+        SectionHeader("OFFLINE MAPS")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                Text(
+                    text = "Pre-download map tiles for use without a cellular connection.",
+                    color = Color(0xFF888888),
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onOpenOfflineMaps,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A2A3A)),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text("Download Area…", color = Color.White, fontWeight = FontWeight.Bold)
+                }
             }
         }
 

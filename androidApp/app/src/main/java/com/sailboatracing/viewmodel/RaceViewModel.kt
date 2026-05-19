@@ -25,6 +25,9 @@ import com.sailboatracing.model.StartLine
 import com.sailboatracing.model.Tack
 import com.sailboatracing.model.TimerState
 import com.sailboatracing.preferences.AppPreferences
+import android.content.Context
+import com.sailboatracing.offline.TileDownloader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
@@ -55,6 +58,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private var phoneGpsJob: Job? = null
     private var phoneImuJob: Job? = null
     private var ntripJob: Job? = null
+    private var downloadJob: Job? = null
+
+    data class DownloadState(val downloaded: Int, val total: Int, val finished: Boolean = false)
+    private val _downloadState = MutableStateFlow<DownloadState?>(null)
+    val downloadState: StateFlow<DownloadState?> = _downloadState.asStateFlow()
     private val sessionRecorder = SessionRecorder(app.applicationContext)
     var nextMarkId = 0
     var nextCasterId = NtripCaster.DEFAULTS.size
@@ -215,6 +223,23 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         stopPhoneImu()
         saveSettings()
         bluetoothService.connect(address, viewModelScope)
+    }
+
+    fun startDownload(context: Context, north: Double, south: Double, west: Double, east: Double) {
+        downloadJob?.cancel()
+        val total = TileDownloader.tileCount(north, south, west, east)
+        _downloadState.value = DownloadState(0, total)
+        downloadJob = viewModelScope.launch(Dispatchers.IO) {
+            TileDownloader.download(context, north, south, west, east) { done, t ->
+                _downloadState.value = DownloadState(done, t)
+            }
+            _downloadState.value = _downloadState.value?.copy(finished = true)
+        }
+    }
+
+    fun cancelDownload() {
+        downloadJob?.cancel()
+        _downloadState.value = null
     }
 
     fun disconnect() {
