@@ -27,6 +27,7 @@ import com.sailboatracing.model.TimerState
 import com.sailboatracing.preferences.AppPreferences
 import android.content.Context
 import com.sailboatracing.offline.TileDownloader
+import com.sailboatracing.service.TimerNotificationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -275,6 +276,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         timerJob?.cancel()
         timerJob = null
         _state.update { it.copy(timerState = TimerState()) }
+        app.applicationContext.stopService(TimerNotificationService.stopIntent(app.applicationContext))
     }
 
     fun setTimerDuration(ms: Long) {
@@ -303,6 +305,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         _state.update { it.copy(timerState = it.timerState.copy(running = true, finished = false)) }
         launchCountdownTimer()
+        val ts = _state.value.timerState
+        app.applicationContext.startForegroundService(
+            TimerNotificationService.startIntent(app.applicationContext, ts.remainingMs, ts.targetEpochMs)
+        )
     }
 
     private fun launchCountdownTimer() {
@@ -336,7 +342,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                     }
                 }
                 prevRemainingMs = ts.remainingMs
-                if (!ts.running) break
+                if (!ts.running) {
+                    app.applicationContext.stopService(TimerNotificationService.stopIntent(app.applicationContext))
+                    break
+                }
             }
         }
     }
