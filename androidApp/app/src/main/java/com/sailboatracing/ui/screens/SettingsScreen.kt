@@ -54,7 +54,11 @@ import com.sailboatracing.ui.theme.PrimaryColor
 import com.sailboatracing.viewmodel.RaceViewModel
 
 @Composable
-fun SettingsScreen(viewModel: RaceViewModel, onOpenOfflineMaps: () -> Unit = {}) {
+fun SettingsScreen(
+    viewModel: RaceViewModel,
+    onOpenOfflineMaps: () -> Unit = {},
+    onOpenSessions: () -> Unit = {}
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showResetConfirm by remember { mutableStateOf(false) }
 
@@ -656,6 +660,15 @@ fun SettingsScreen(viewModel: RaceViewModel, onOpenOfflineMaps: () -> Unit = {})
                     fontSize = 11.sp,
                     lineHeight = 16.sp
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(
+                    onClick = onOpenSessions,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A2E)),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text("VIEW RECORDINGS", color = PrimaryColor, fontWeight = FontWeight.Bold)
+                }
             }
         }
 

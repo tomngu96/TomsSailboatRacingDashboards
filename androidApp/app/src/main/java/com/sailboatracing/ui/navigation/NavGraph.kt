@@ -34,6 +34,7 @@ import com.sailboatracing.ui.screens.ChartsScreen
 import com.sailboatracing.ui.screens.CourseScreen
 import com.sailboatracing.ui.screens.DashboardScreen
 import com.sailboatracing.ui.screens.OfflineMapsScreen
+import com.sailboatracing.ui.screens.SessionsScreen
 import com.sailboatracing.ui.screens.SettingsScreen
 import com.sailboatracing.ui.screens.TimerSetupScreen
 import com.sailboatracing.ui.theme.PrimaryColor
@@ -65,7 +66,7 @@ fun NavGraph(viewModel: RaceViewModel) {
     Scaffold(
         containerColor = Color(0xFF0A0A0F),
         bottomBar = {
-            val showBottomBar = currentDestination?.route != "offline_maps"
+            val showBottomBar = currentDestination?.route !in setOf("offline_maps", "sessions")
             if (!showBottomBar) return@Scaffold
             NavigationBar(
                 containerColor = SurfaceColor,
@@ -131,12 +132,19 @@ fun NavGraph(viewModel: RaceViewModel) {
                 ChartsScreen(viewModel = viewModel)
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(viewModel = viewModel, onOpenOfflineMaps = {
-                    navController.navigate("offline_maps")
-                })
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onOpenOfflineMaps = { navController.navigate("offline_maps") },
+                    onOpenSessions  = { navController.navigate("sessions") }
+                )
             }
             composable("offline_maps") {
                 OfflineMapsScreen(viewModel = viewModel, onBack = {
+                    navController.popBackStack()
+                })
+            }
+            composable("sessions") {
+                SessionsScreen(viewModel = viewModel, onBack = {
                     navController.popBackStack()
                 })
             }

@@ -11,6 +11,10 @@ import com.sailboatracing.bluetooth.BluetoothService
 import com.sailboatracing.session.SessionRecorder
 import com.sailboatracing.bluetooth.NtripClient
 import com.sailboatracing.bluetooth.NtripSourceEntry
+import com.sailboatracing.model.ReplayFrame
+import com.sailboatracing.model.SessionMeta
+import com.sailboatracing.session.SessionLoader
+import kotlinx.coroutines.withContext
 import com.sailboatracing.bluetooth.PacketParser
 import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.location.PhoneGpsService
@@ -59,10 +63,30 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private var phoneImuJob: Job? = null
     private var ntripJob: Job? = null
     private var downloadJob: Job? = null
+    private var replayJob: Job? = null
 
     data class DownloadState(val downloaded: Int, val total: Int, val finished: Boolean = false)
     private val _downloadState = MutableStateFlow<DownloadState?>(null)
     val downloadState: StateFlow<DownloadState?> = _downloadState.asStateFlow()
+
+    // ── Replay ────────────────────────────────────────────────────────────────
+    private val _replaySessions = MutableStateFlow<List<SessionMeta>>(emptyList())
+    val replaySessions: StateFlow<List<SessionMeta>> = _replaySessions.asStateFlow()
+
+    private val _replayFrames = MutableStateFlow<List<ReplayFrame>>(emptyList())
+    val replayFrames: StateFlow<List<ReplayFrame>> = _replayFrames.asStateFlow()
+
+    private val _replayIndex = MutableStateFlow(0)
+    val replayIndex: StateFlow<Int> = _replayIndex.asStateFlow()
+
+    private val _replayPlaying = MutableStateFlow(false)
+    val replayPlaying: StateFlow<Boolean> = _replayPlaying.asStateFlow()
+
+    private val _replaySpeed = MutableStateFlow(10)
+    val replaySpeed: StateFlow<Int> = _replaySpeed.asStateFlow()
+
+    private val _replayLoading = MutableStateFlow(false)
+    val replayLoading: StateFlow<Boolean> = _replayLoading.asStateFlow()
     private val sessionRecorder = SessionRecorder(app.applicationContext)
     var nextMarkId = 0
     var nextCasterId = NtripCaster.DEFAULTS.size
@@ -977,6 +1001,80 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(phoneImuActive = false) }
     }
 
+    // ── Session Replay ─────────────────────────────────────────────────
+
+    fun loadSessionList() {
+        viewModelScope.launch {
+            _replaySessions.value = withContext(Dispatchers.IO) {
+                SessionLoader.listSessions(app.applicationContext)
+            }
+        }
+    }
+
+    fun loadReplaySession(meta: SessionMeta) {
+        replayJob?.cancel()
+        _replayPlaying.value = false
+        _replayIndex.value   = 0
+        _replayFrames.value  = emptyList()
+        _replayLoading.value = true
+        viewModelScope.launch {
+            val frames = withContext(Dispatchers.IO) { SessionLoader.loadFrames(meta.filePath) }
+            _replayFrames.value  = frames
+            _replayLoading.value = false
+        }
+    }
+
+    fun setReplayIndex(index: Int) {
+        val max = (_replayFrames.value.size - 1).coerceAtLeast(0)
+        _replayIndex.value = index.coerceIn(0, max)
+    }
+
+    fun setReplaySpeed(speed: Int) { _replaySpeed.value = speed }
+
+    fun toggleReplayPlayback() {
+        val frames = _replayFrames.value
+        if (frames.isEmpty()) return
+        if (_replayPlaying.value) {
+            _replayPlaying.value = false
+            replayJob?.cancel()
+            return
+        }
+        // Restart from beginning if at the end
+        if (_replayIndex.value >= frames.size - 1) _replayIndex.value = 0
+        _replayPlaying.value = true
+        replayJob = viewModelScope.launch {
+            var lastWallMs = System.currentTimeMillis()
+            while (isActive && _replayPlaying.value) {
+                delay(16L)  // ~60 fps
+                val now      = System.currentTimeMillis()
+                val wallMs   = now - lastWallMs
+                lastWallMs   = now
+                val simMs    = wallMs * _replaySpeed.value
+                val f        = _replayFrames.value
+                val cur      = _replayIndex.value
+                if (cur >= f.size - 1) { _replayPlaying.value = false; break }
+                val targetTs = f[cur].timestampMs + simMs
+                var next     = cur + 1
+                while (next < f.size - 1 && f[next].timestampMs < targetTs) next++
+                _replayIndex.value = next
+            }
+        }
+    }
+
+    fun stopReplay() {
+        replayJob?.cancel()
+        replayJob            = null
+        _replayPlaying.value = false
+        _replayFrames.value  = emptyList()
+        _replayIndex.value   = 0
+        _replayLoading.value = false
+    }
+
+    fun deleteSession(meta: SessionMeta) {
+        viewModelScope.launch(Dispatchers.IO) { SessionLoader.deleteSession(meta.filePath) }
+        _replaySessions.value = _replaySessions.value.filter { it.filePath != meta.filePath }
+    }
+
     override fun onCleared() {
         super.onCleared()
         tts?.shutdown()
@@ -984,6 +1082,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         stopPhoneGps()
         stopPhoneImu()
         stopNtrip()
+        replayJob?.cancel()
         sessionRecorder.stop()
         bluetoothService.disconnect()
     }
