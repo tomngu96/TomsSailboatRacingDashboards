@@ -44,7 +44,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -96,7 +95,6 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     var nextCasterId = NtripCaster.DEFAULTS.size
 
     private var lastGoodHeading: Float? = null
-    private var headingSpikeCount: Int = 0
     private var intentionalDisconnect: Boolean = false
     // Kept at 3 minutes regardless of the display historyWindowSeconds, so the headed/lifted
     // detector always has enough baseline data.
@@ -278,6 +276,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     fun disconnect() {
         intentionalDisconnect = true
         sogFilter.reset()
+        lastGoodHeading = null
         AppPreferences.clearLastBtAddress(app.applicationContext)
         bluetoothService.disconnect()
     }
@@ -1099,32 +1098,14 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ── Data Processing ────────────────────────────────────────────────
 
-    // Returns the last known good heading when accuracy is 0 so GPS data still flows cleanly
-    // without the headed/lifted detector or UI being poisoned by uncalibrated IMU values.
+    // Holds the last heading received at accuracy >= 1.
+    // When the IMU reports accuracy = 0 (uncalibrated) we freeze on this value so downstream
+    // consumers (display, headed/lifted detector) don't see junk — GPS data keeps flowing.
+    // When accuracy >= 1 we trust the sensor directly; that's what the calibration flag is for.
     private fun filterHeading(incoming: Float, accuracy: Int): Float {
-        if (accuracy < 1) return lastGoodHeading ?: incoming  // discard, keep last known
-        val last = lastGoodHeading
-        if (last == null) {
-            lastGoodHeading = incoming
-            headingSpikeCount = 0
-            return incoming
-        }
-        var diff = incoming - last
-        if (diff > 180f) diff -= 360f
-        if (diff < -180f) diff += 360f
-        return if (abs(diff) > 60f) {
-            headingSpikeCount++
-            if (headingSpikeCount >= 3) {
-                // Three consecutive spikes — sensor has genuinely moved, accept and reset
-                lastGoodHeading = incoming
-                headingSpikeCount = 0
-            }
-            lastGoodHeading ?: incoming
-        } else {
-            headingSpikeCount = 0
-            lastGoodHeading = incoming
-            incoming
-        }
+        if (accuracy < 1) return lastGoodHeading ?: incoming
+        lastGoodHeading = incoming
+        return incoming
     }
 
     private fun onNewData(data: SensorData) {
