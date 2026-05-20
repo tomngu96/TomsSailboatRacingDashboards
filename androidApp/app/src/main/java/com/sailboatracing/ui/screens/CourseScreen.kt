@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path as AndroidPath
 import android.graphics.drawable.BitmapDrawable
 import android.view.MotionEvent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -170,13 +171,16 @@ private fun StartLineTab(
     val currentGpsPosition = state.latestData?.let { d ->
         if (d.lat != 0.0 || d.lon != 0.0) LatLng(d.lat, d.lon) else null
     }
+    val imuCalibrated = (state.latestData?.imuAccuracy ?: 0) >= 1
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+
         Text(
             text = when {
                 hasRecentGpsFix -> "GPS ready"
@@ -236,8 +240,18 @@ private fun StartLineTab(
             )
         }
 
+        // ── Live map preview ───────────────────────────────────────────────
+        StartLineMapPreview(
+            latestData = state.latestData,
+            startLine = line,
+            marks = state.marks,
+            historicalCogDeg = state.historicalCogDeg,
+            showHeadingLines = state.showHeadingLines,
+            headingLineMeters = state.headingLineMeters,
+            phoneImuHeading = state.phoneImuHeading
+        )
+
         // ── Draw from heading ──────────────────────────────────────────────
-        val imuCalibrated = (state.latestData?.imuAccuracy ?: 0) >= 1
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1A22)),
@@ -247,7 +261,7 @@ private fun StartLineTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "DRAW LINE FROM HEADING",
@@ -262,9 +276,11 @@ private fun StartLineTab(
                     color = Color(0xFF777777),
                     lineHeight = 16.sp
                 )
+
+                // Primary: use external/hardware IMU heading (no calibration guard — trust the heading)
                 Button(
                     onClick = { viewModel.setStartLineFromHeading() },
-                    enabled = hasRecentGpsFix && imuCalibrated,
+                    enabled = hasRecentGpsFix,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF1A3A55),
@@ -274,13 +290,40 @@ private fun StartLineTab(
                     )
                 ) {
                     Text(
-                        text = if (!imuCalibrated) "⚠ IMU NOT CALIBRATED"
-                               else if (!hasRecentGpsFix) "⚠ NO GPS FIX"
-                               else "↑  SET LINE FROM CURRENT HEADING",
+                        text = if (!hasRecentGpsFix) "⚠ NO GPS FIX"
+                               else if (imuCalibrated) "↑  SET LINE FROM HEADING"
+                               else "↑  SET LINE FROM HEADING  (IMU uncal)",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
                 }
+
+                // Override: use phone's own compass — always available, always calibrated
+                OutlinedButton(
+                    onClick = { viewModel.setStartLineFromPhoneHeading() },
+                    enabled = hasRecentGpsFix,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFFFAB40),
+                        disabledContentColor = Color(0xFF444433)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (hasRecentGpsFix) Color(0xFFFFAB40) else Color(0xFF333322)
+                    )
+                ) {
+                    Text(
+                        text = "📱  USE PHONE COMPASS",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+                Text(
+                    text = "Phone compass is always ready — use it when the external IMU isn't calibrated or when Bluetooth isn't connected.",
+                    fontSize = 10.sp,
+                    color = Color(0xFF555555),
+                    lineHeight = 14.sp
+                )
             }
         }
 
@@ -293,6 +336,157 @@ private fun StartLineTab(
                 Text(text = "CLEAR LINE", fontWeight = FontWeight.Bold)
             }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+// Compact live map showing the boat, heading line and start line for the Start Line tab.
+@Composable
+private fun StartLineMapPreview(
+    latestData: SensorData?,
+    startLine: StartLine?,
+    marks: List<RaceMark>,
+    historicalCogDeg: Float?,
+    showHeadingLines: Boolean,
+    headingLineMeters: Int,
+    phoneImuHeading: Float? = null
+) {
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+
+    Configuration.getInstance().userAgentValue = context.packageName
+
+    val mapView = remember {
+        MapView(context).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            controller.setZoom(16.0)
+            isHorizontalMapRepetitionEnabled = false
+            isVerticalMapRepetitionEnabled = false
+        }
+    }
+
+    // Auto-center on boat position once we have a fix
+    val hasPosition = latestData != null && (latestData.lat != 0.0 || latestData.lon != 0.0)
+    if (hasPosition) {
+        mapView.controller.setCenter(GeoPoint(latestData!!.lat, latestData.lon))
+    }
+
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE  -> mapView.onPause()
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0F))
+    ) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            update = { mv ->
+                mv.overlays.clear()
+
+                // 1. Heading + COG lines first so projected start-line previews render on top
+                if (hasPosition) {
+                    val boatLat = latestData!!.lat
+                    val boatLon = latestData.lon
+                    val boatGeo = GeoPoint(boatLat, boatLon)
+
+                    if (showHeadingLines) {
+                        val hdgEnd = projectGeoPoint(boatLat, boatLon, latestData.heading.toDouble(), headingLineMeters.toDouble())
+                        mv.overlays.add(Polyline(mv).apply {
+                            setPoints(listOf(boatGeo, hdgEnd))
+                            outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
+                            outlinePaint.strokeWidth = 3f
+                            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        })
+                        val cogDeg = historicalCogDeg ?: latestData.cogDeg
+                        if (latestData.fixType >= 2 && latestData.sogKts >= 0.3f) {
+                            val cogEnd = projectGeoPoint(boatLat, boatLon, cogDeg.toDouble(), headingLineMeters.toDouble())
+                            mv.overlays.add(Polyline(mv).apply {
+                                setPoints(listOf(boatGeo, cogEnd))
+                                outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)
+                                outlinePaint.strokeWidth = 3f
+                                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                            })
+                        }
+                    }
+                }
+
+                // 2. Projected start-line previews (dashed) — drawn over heading lines
+                fun addProjectedLine(bearingDeg: Double, color: Int) {
+                    if (!hasPosition || latestData == null) return
+                    val lat = latestData.lat; val lon = latestData.lon
+                    val pinEnd  = projectGeoPoint(lat, lon, bearingDeg,               250.0)
+                    val boatEnd = projectGeoPoint(lat, lon, (bearingDeg + 180.0) % 360.0, 250.0)
+                    mv.overlays.add(Polyline(mv).apply {
+                        setPoints(listOf(pinEnd, boatEnd))
+                        outlinePaint.color = color
+                        outlinePaint.strokeWidth = 5f
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        outlinePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(18f, 12f), 0f)
+                    })
+                }
+
+                // Phone compass — amber, drawn first so hardware line renders on top
+                phoneImuHeading?.let { hdg ->
+                    addProjectedLine(hdg.toDouble(), android.graphics.Color.argb(220, 255, 171, 64))
+                }
+                // Hardware IMU — blue
+                latestData?.let { d ->
+                    addProjectedLine(d.heading.toDouble(), android.graphics.Color.argb(220, 102, 187, 255))
+                }
+
+                // 3. Confirmed start line (solid bright amber) on top of previews
+                if (startLine != null) {
+                    val pinGeo  = GeoPoint(startLine.pin.latitude,  startLine.pin.longitude)
+                    val boatGeo = GeoPoint(startLine.boat.latitude, startLine.boat.longitude)
+                    mv.overlays.add(Polyline(mv).apply {
+                        setPoints(listOf(pinGeo, boatGeo))
+                        outlinePaint.color = android.graphics.Color.argb(230, 255, 200, 0)
+                        outlinePaint.strokeWidth = 6f
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                    })
+                    mv.overlays.add(Marker(mv).apply {
+                        position = pinGeo
+                        title = "PIN"
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                    mv.overlays.add(Marker(mv).apply {
+                        position = boatGeo
+                        title = "BOAT END"
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                }
+
+                // 4. Boat marker on top of everything
+                if (hasPosition) {
+                    mv.overlays.add(Marker(mv).apply {
+                        position = GeoPoint(latestData!!.lat, latestData.lon)
+                        title = ""
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        icon = boatBitmapDrawable(mv.context, latestData.heading)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                }
+
+                mv.invalidate()
+            }
+        )
     }
 }
 

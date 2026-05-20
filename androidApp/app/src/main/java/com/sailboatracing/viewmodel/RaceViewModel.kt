@@ -96,6 +96,9 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private var lastGoodHeading: Float? = null
     private var intentionalDisconnect: Boolean = false
+    // Latest reading from the phone IMU — tracked regardless of BT connection state so the
+    // "set start line from phone IMU" override always has a fresh heading available.
+    private var lastPhoneImuHeading: Float? = null
     // Kept at 3 minutes regardless of the display historyWindowSeconds, so the headed/lifted
     // detector always has enough baseline data.
     private var detectorHistory: List<SensorData> = emptyList()
@@ -525,11 +528,22 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     fun setStartLineFromHeading() {
         val st = _state.value
         val data = st.latestData ?: return
-        if (data.imuAccuracy < 1) return          // need a calibrated heading
         if (st.gpsStale || st.lastGpsFixMs == 0L) return
-        val bearing = data.heading.toDouble()
-        val pin  = projectLatLon(data.lat, data.lon, bearing,               250.0) // forward
-        val boat = projectLatLon(data.lat, data.lon, (bearing + 180.0) % 360.0, 250.0) // backward
+        applyStartLineFromBearing(data.lat, data.lon, data.heading.toDouble())
+    }
+
+    /** Uses the phone's own IMU heading — works even when an external GPS/IMU is connected. */
+    fun setStartLineFromPhoneHeading() {
+        val st = _state.value
+        val data = st.latestData ?: return
+        if (st.gpsStale || st.lastGpsFixMs == 0L) return
+        val bearing = lastPhoneImuHeading ?: return
+        applyStartLineFromBearing(data.lat, data.lon, bearing.toDouble())
+    }
+
+    private fun applyStartLineFromBearing(lat: Double, lon: Double, bearingDeg: Double) {
+        val pin  = projectLatLon(lat, lon, bearingDeg,               250.0)
+        val boat = projectLatLon(lat, lon, (bearingDeg + 180.0) % 360.0, 250.0)
         _state.update { current ->
             current.copy(
                 startLine = StartLine(pin = pin, boat = boat),
@@ -980,6 +994,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             phoneImuService.start()
             _state.update { it.copy(phoneImuActive = true) }
             phoneImuService.readings.collect { reading ->
+                // Always track the latest phone IMU heading so the start-line override works
+                // even when Bluetooth (external IMU) is connected.
+                lastPhoneImuHeading = reading.heading
+                _state.update { it.copy(phoneImuHeading = reading.heading) }
                 if (!_state.value.connected) {
                     val last = _state.value.latestData
                     onNewData(SensorData(

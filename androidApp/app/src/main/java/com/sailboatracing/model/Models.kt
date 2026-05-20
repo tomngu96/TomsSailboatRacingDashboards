@@ -173,5 +173,7 @@ data class RaceState(
     val ntripNearbyMountpoints: List<String> = emptyList(),
     val ntripAutoMountpointIndex: Int = 0,
     // Kalman-filtered SOG for display — raw sogKts in latestData is still used for recording/charts
-    val smoothedSogKts: Float = 0f
+    val smoothedSogKts: Float = 0f,
+    // Latest phone IMU heading — updated regardless of BT state for start-line preview/override
+    val phoneImuHeading: Float? = null
 )
