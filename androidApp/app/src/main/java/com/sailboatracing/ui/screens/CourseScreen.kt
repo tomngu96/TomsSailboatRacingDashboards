@@ -81,6 +81,7 @@ import com.sailboatracing.model.LatLng
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.Rounding
 import com.sailboatracing.model.SensorData
+import com.sailboatracing.model.Sighting
 import com.sailboatracing.model.StartLine
 import com.sailboatracing.ui.theme.PrimaryColor
 import com.sailboatracing.viewmodel.RaceViewModel
@@ -88,6 +89,7 @@ import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.abs
 import kotlin.math.sin
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -101,7 +103,7 @@ import org.osmdroid.views.overlay.Polyline
 fun CourseScreen(viewModel: RaceViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("START LINE", "MARKS")
+    val tabs = listOf("START LINE", "MARKS", "TRIANGULATE")
 
     Column(
         modifier = Modifier
@@ -152,6 +154,7 @@ fun CourseScreen(viewModel: RaceViewModel) {
         when (selectedTab) {
             0 -> StartLineTab(viewModel = viewModel, state = state)
             1 -> MarksTab(viewModel = viewModel, state = state, onNavigateToStartLineTab = { selectedTab = 0 })
+            2 -> TriangulatorTab(viewModel = viewModel, state = state)
         }
     }
 }
@@ -1466,6 +1469,587 @@ private fun CopyStartLineDialog(
             TextButton(onClick = onDismiss) { Text("CANCEL", color = Color(0xFF888888)) }
         }
     )
+}
+
+// ──────────────────────── MARK TRIANGULATOR TAB ──────────────────────
+
+/** Compose color + matching Android color int for each sighting ray. */
+private val SIGHTING_COLORS: List<Pair<Int, Color>> = listOf(
+    Pair(android.graphics.Color.rgb(255, 107, 107), Color(0xFFFF6B6B)),
+    Pair(android.graphics.Color.rgb(107, 203, 119), Color(0xFF6BCB77)),
+    Pair(android.graphics.Color.rgb( 77, 150, 255), Color(0xFF4D96FF)),
+    Pair(android.graphics.Color.rgb(255, 217,  61), Color(0xFFFFD93D)),
+    Pair(android.graphics.Color.rgb(255, 159,  28), Color(0xFFFF9F1C)),
+    Pair(android.graphics.Color.rgb(204, 119, 255), Color(0xFFCC77FF)),
+    Pair(android.graphics.Color.rgb(  0, 217, 255), Color(0xFF00D9FF)),
+    Pair(android.graphics.Color.rgb(255, 119, 168), Color(0xFFFF77A8)),
+)
+
+private data class TriResult(val lat: Double, val lon: Double, val intersectionCount: Int)
+
+/**
+ * Triangulate a mark from bearing sightings using pairwise ray intersections (Cramer's rule).
+ * Projects all points to a local Cartesian frame, finds forward intersections, then averages.
+ */
+private fun computeTriangulation(sightings: List<Sighting>): TriResult? {
+    if (sightings.size < 2) return null
+    val refLat = sightings.map { it.lat }.average()
+    val refLon = sightings.map { it.lon }.average()
+    val refLatRad = Math.toRadians(refLat)
+    val mPerDeg = 111320.0
+
+    data class Ray(val x: Double, val y: Double, val dx: Double, val dy: Double)
+    val rays = sightings.map { s ->
+        val x  = (s.lon - refLon) * cos(refLatRad) * mPerDeg
+        val y  = (s.lat - refLat) * mPerDeg
+        val br = Math.toRadians(s.bearingDeg.toDouble())
+        Ray(x, y, sin(br), cos(br))
+    }
+
+    val intersections = mutableListOf<Pair<Double, Double>>()
+    for (i in rays.indices) {
+        for (j in i + 1 until rays.size) {
+            val a = rays[i]; val b = rays[j]
+            // Solve: a.x + t1*a.dx = b.x + t2*b.dx
+            //        a.y + t1*a.dy = b.y + t2*b.dy
+            val det = a.dx * (-b.dy) + b.dx * a.dy
+            if (abs(det) < 1e-10) continue          // parallel rays
+            val ddx = b.x - a.x; val ddy = b.y - a.y
+            val t1 = (ddx * (-b.dy) + b.dx * ddy) / det
+            val t2 = (a.dx *   ddy  - ddx * a.dy) / det
+            if (t1 < 0 || t2 < 0) continue          // intersection is behind one of the rays
+            intersections += Pair(a.x + t1 * a.dx, a.y + t1 * a.dy)
+        }
+    }
+    if (intersections.isEmpty()) return null
+
+    val avgX = intersections.map { it.first  }.average()
+    val avgY = intersections.map { it.second }.average()
+    val lat  = refLat + avgY / mPerDeg
+    val lon  = refLon + avgX / (mPerDeg * cos(refLatRad))
+    return TriResult(lat, lon, intersections.size)
+}
+
+@Composable
+private fun TriangulatorTab(
+    viewModel: RaceViewModel,
+    state: com.sailboatracing.model.RaceState
+) {
+    val sightings        = state.triangulatorSightings
+    val activeSightings  = sightings.filter { it.active }
+    val triResult        = remember(activeSightings) { computeTriangulation(activeSightings) }
+    val hasRecentGpsFix  = !state.gpsStale && state.lastGpsFixMs > 0L
+    val hasPhoneHeading  = state.phoneImuHeading != null
+    val canShoot         = hasRecentGpsFix && hasPhoneHeading
+
+    var showAddMarkDialog by remember { mutableStateOf(false) }
+    var pendingMarkName   by remember { mutableStateOf("Mark") }
+    var initialCentered   by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A0A0F))
+    ) {
+        // ── Map ─────────────────────────────────────────────────────────
+        TriangulatorMap(
+            latestData      = state.latestData,
+            phoneImuHeading = state.phoneImuHeading,
+            sightings       = sightings,
+            triResult       = triResult,
+            initialCentered = initialCentered,
+            onInitialCenter = { initialCentered = true },
+            modifier        = Modifier
+                .fillMaxWidth()
+                .height(280.dp)
+        )
+
+        // ── Scrollable controls ─────────────────────────────────────────
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // SHOOT button
+            Button(
+                onClick  = { viewModel.addTriangulatorSighting() },
+                enabled  = canShoot,
+                modifier = Modifier.fillMaxWidth(),
+                colors   = ButtonDefaults.buttonColors(
+                    containerColor         = PrimaryColor,
+                    contentColor           = Color.Black,
+                    disabledContainerColor = Color(0xFF1A1A2E),
+                    disabledContentColor   = Color(0xFF444466)
+                )
+            ) {
+                Text(
+                    text = when {
+                        !hasRecentGpsFix  -> "⚠  WAITING FOR GPS"
+                        !hasPhoneHeading  -> "⚠  PHONE COMPASS NOT READY"
+                        else -> "📍  SHOOT BEARING  (${sightings.size} shot${if (sightings.size != 1) "s" else ""})"
+                    },
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp
+                )
+            }
+
+            Text(
+                text = "Point your phone toward a mark and tap SHOOT BEARING. Move several hundred meters and repeat. " +
+                       "The app estimates the mark's position by averaging bearing intersections.",
+                color    = Color(0xFF666666),
+                fontSize = 11.sp,
+                lineHeight = 16.sp
+            )
+
+            // ── Sightings list ──────────────────────────────────────────
+            if (sightings.isNotEmpty()) {
+                Text(
+                    text       = "SIGHTINGS  (${activeSightings.size}/${sightings.size} active)",
+                    fontSize   = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = Color(0xFF4488CC)
+                )
+                sightings.forEachIndexed { idx, sighting ->
+                    SightingRow(
+                        index    = idx + 1,
+                        sighting = sighting,
+                        color    = SIGHTING_COLORS[idx % SIGHTING_COLORS.size].second,
+                        onToggle = { viewModel.toggleTriangulatorSighting(sighting.id) },
+                        onDelete = { viewModel.removeTriangulatorSighting(sighting.id) }
+                    )
+                }
+                OutlinedButton(
+                    onClick  = { viewModel.clearTriangulatorSightings() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF4444))
+                ) {
+                    Text("CLEAR ALL SIGHTINGS", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            // ── Result card ─────────────────────────────────────────────
+            when {
+                triResult != null -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFF0E1A10)),
+                        shape    = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text       = "ESTIMATED MARK POSITION",
+                                fontSize   = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = Color(0xFF00FF88)
+                            )
+                            Text(
+                                text       = "%.6f,  %.6f".format(triResult.lat, triResult.lon),
+                                fontSize   = 14.sp,
+                                color      = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text     = "${triResult.intersectionCount} bearing intersection${if (triResult.intersectionCount != 1) "s" else ""} averaged",
+                                fontSize = 11.sp,
+                                color    = Color(0xFF888888)
+                            )
+
+                            HorizontalDivider(color = Color(0xFF2A2A2A))
+                            Text("ADD AS:", fontSize = 11.sp, color = Color(0xFF666666))
+
+                            Button(
+                                onClick  = { showAddMarkDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors   = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1A3A55),
+                                    contentColor   = Color(0xFF66BBFF)
+                                )
+                            ) {
+                                Text("ADD AS MARK", fontWeight = FontWeight.Bold)
+                            }
+
+                            Row(
+                                modifier            = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick   = { viewModel.markStartLinePinAt(triResult.lat, triResult.lon) },
+                                    modifier  = Modifier.weight(1f),
+                                    colors    = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFAB40)),
+                                    border    = BorderStroke(1.dp, Color(0xFFFFAB40))
+                                ) {
+                                    Text("START LINE PIN", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                                OutlinedButton(
+                                    onClick   = { viewModel.markStartLineBoatAt(triResult.lat, triResult.lon) },
+                                    modifier  = Modifier.weight(1f),
+                                    colors    = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFAB40)),
+                                    border    = BorderStroke(1.dp, Color(0xFFFFAB40))
+                                ) {
+                                    Text("COMMITTEE BOAT", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                activeSightings.size == 1 -> {
+                    Text(
+                        text     = "Add at least one more active sighting to triangulate.",
+                        color    = Color(0xFF666666),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+
+    if (showAddMarkDialog && triResult != null) {
+        AddMarkFromTriangulatorDialog(
+            defaultName = pendingMarkName,
+            position    = LatLng(triResult.lat, triResult.lon),
+            onDismiss   = { showAddMarkDialog = false },
+            onAdd       = { name, rounding ->
+                pendingMarkName = name
+                viewModel.addMarkAt(name, triResult.lat, triResult.lon, rounding, false, null)
+                showAddMarkDialog = false
+            }
+        )
+    }
+}
+
+// ────────────────────────── TRIANGULATOR MAP ─────────────────────────
+
+@Composable
+private fun TriangulatorMap(
+    latestData:      SensorData?,
+    phoneImuHeading: Float?,
+    sightings:       List<Sighting>,
+    triResult:       TriResult?,
+    initialCentered: Boolean,
+    onInitialCenter: () -> Unit,
+    modifier:        Modifier = Modifier
+) {
+    val context   = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    Configuration.getInstance().userAgentValue = context.packageName
+
+    val mapView = remember {
+        MapView(context).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            controller.setZoom(14.0)
+            isHorizontalMapRepetitionEnabled = false
+            isVerticalMapRepetitionEnabled   = false
+        }
+    }
+
+    val hasPosition = latestData != null && (latestData.lat != 0.0 || latestData.lon != 0.0)
+
+    // Center once on first GPS fix so the user can freely pan afterwards
+    if (!initialCentered && hasPosition) {
+        mapView.controller.setCenter(GeoPoint(latestData!!.lat, latestData.lon))
+        onInitialCenter()
+    }
+
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE  -> mapView.onPause()
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+
+    Card(
+        modifier = modifier,
+        shape    = RoundedCornerShape(0.dp),
+        colors   = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0F))
+    ) {
+        AndroidView(
+            factory  = { mapView },
+            modifier = Modifier.fillMaxSize(),
+            update   = { mv ->
+                mv.overlays.clear()
+
+                // 1. Sighting rays — colored, 4 km forward, dimmed when inactive
+                sightings.forEachIndexed { idx, sighting ->
+                    val (androidColor, _) = SIGHTING_COLORS[idx % SIGHTING_COLORS.size]
+                    val alpha    = if (sighting.active) 210 else 70
+                    val r = (androidColor shr 16) and 0xFF
+                    val g = (androidColor shr  8) and 0xFF
+                    val b =  androidColor         and 0xFF
+                    val startGeo = GeoPoint(sighting.lat, sighting.lon)
+                    val endGeo   = projectGeoPoint(sighting.lat, sighting.lon, sighting.bearingDeg.toDouble(), 4000.0)
+                    mv.overlays.add(Polyline(mv).apply {
+                        setPoints(listOf(startGeo, endGeo))
+                        outlinePaint.color       = android.graphics.Color.argb(alpha, r, g, b)
+                        outlinePaint.strokeWidth = if (sighting.active) 4f else 2f
+                        outlinePaint.strokeCap   = android.graphics.Paint.Cap.ROUND
+                    })
+                    // Small colored dot at the sighting origin — same color as the ray
+                    mv.overlays.add(Marker(mv).apply {
+                        position = startGeo
+                        title    = "Sighting ${idx + 1}: ${sighting.bearingDeg.roundToInt()}°"
+                        icon     = sightingDotDrawable(mv.context, androidColor, active = sighting.active)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                }
+
+                // 2. Estimated mark — gold target circle, visually distinct from sighting dots
+                if (triResult != null) {
+                    mv.overlays.add(Marker(mv).apply {
+                        position = GeoPoint(triResult.lat, triResult.lon)
+                        title    = "Estimated Mark  (${triResult.intersectionCount} intersections)"
+                        icon     = estimatedMarkDrawable(mv.context)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                }
+
+                // 3. Live phone heading line + boat marker (on top)
+                if (hasPosition && latestData != null) {
+                    val boatGeo = GeoPoint(latestData.lat, latestData.lon)
+
+                    phoneImuHeading?.let { hdg ->
+                        val hdgEnd = projectGeoPoint(latestData.lat, latestData.lon, hdg.toDouble(), 2000.0)
+                        mv.overlays.add(Polyline(mv).apply {
+                            setPoints(listOf(boatGeo, hdgEnd))
+                            outlinePaint.color       = android.graphics.Color.argb(200, 255, 171, 64)
+                            outlinePaint.strokeWidth = 3f
+                            outlinePaint.strokeCap   = android.graphics.Paint.Cap.ROUND
+                            outlinePaint.pathEffect  = android.graphics.DashPathEffect(floatArrayOf(15f, 10f), 0f)
+                        })
+                    }
+
+                    mv.overlays.add(Marker(mv).apply {
+                        position = boatGeo
+                        title    = ""
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        icon     = boatBitmapDrawable(mv.context, latestData.heading)
+                        setOnMarkerClickListener { _, _ -> false }
+                    })
+                }
+
+                mv.invalidate()
+            }
+        )
+    }
+}
+
+// ──────────────────────────── SIGHTING ROW ───────────────────────────
+
+@Composable
+private fun SightingRow(
+    index:    Int,
+    sighting: Sighting,
+    color:    Color,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val activeColor = if (sighting.active) color else color.copy(alpha = 0.25f)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors   = CardDefaults.cardColors(
+            containerColor = if (sighting.active) Color(0xFF14141E) else Color(0xFF0C0C14)
+        ),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Row(
+            modifier          = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Color dot
+            Box(
+                modifier = Modifier
+                    .width(12.dp)
+                    .height(12.dp)
+                    .background(activeColor, RoundedCornerShape(50))
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text       = "#$index  ${sighting.bearingDeg.roundToInt()}° bearing",
+                    fontSize   = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = if (sighting.active) Color.White else Color(0xFF555555)
+                )
+                Text(
+                    text     = "%.5f, %.5f".format(sighting.lat, sighting.lon),
+                    fontSize = 11.sp,
+                    color    = Color(0xFF666666)
+                )
+            }
+            Switch(
+                checked         = sighting.active,
+                onCheckedChange = { onToggle() },
+                colors          = SwitchDefaults.colors(
+                    checkedThumbColor   = Color.Black,
+                    checkedTrackColor   = color,
+                    uncheckedThumbColor = Color(0xFF555555),
+                    uncheckedTrackColor = Color(0xFF333333)
+                )
+            )
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = "Remove sighting", tint = Color(0xFFFF4444))
+            }
+        }
+    }
+}
+
+// ──────────────────── ADD MARK FROM TRIANGULATOR DIALOG ──────────────
+
+@Composable
+private fun AddMarkFromTriangulatorDialog(
+    defaultName: String,
+    position:    LatLng,
+    onDismiss:   () -> Unit,
+    onAdd:       (name: String, rounding: Rounding) -> Unit
+) {
+    var name     by remember { mutableStateOf(defaultName) }
+    var rounding by remember { mutableStateOf(Rounding.STARBOARD) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = Color(0xFF14141E),
+        title            = { Text("Add Triangulated Mark", color = Color.White) },
+        text             = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text     = "Position: %.5f,  %.5f".format(position.latitude, position.longitude),
+                    color    = Color(0xFF888888),
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value         = name,
+                    onValueChange = { name = it },
+                    label         = { Text("Mark Name", color = Color(0xFF888888)) },
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = PrimaryColor,
+                        unfocusedBorderColor = Color(0xFF444444),
+                        focusedTextColor     = Color.White,
+                        unfocusedTextColor   = Color.White,
+                        cursorColor          = PrimaryColor
+                    ),
+                    modifier    = Modifier.fillMaxWidth(),
+                    singleLine  = true
+                )
+                Text("Rounding", fontSize = 12.sp, color = Color(0xFF888888))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = rounding == Rounding.STARBOARD,
+                        onClick  = { rounding = Rounding.STARBOARD },
+                        label    = { Text("STARBOARD") },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF003300),
+                            selectedLabelColor     = Color(0xFF00FF88),
+                            labelColor             = Color(0xFF888888)
+                        )
+                    )
+                    FilterChip(
+                        selected = rounding == Rounding.PORT,
+                        onClick  = { rounding = Rounding.PORT },
+                        label    = { Text("PORT") },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF330000),
+                            selectedLabelColor     = Color(0xFFFF4444),
+                            labelColor             = Color(0xFF888888)
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = { onAdd(name.trim().ifBlank { "Mark" }, rounding) },
+                enabled  = name.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = PrimaryColor, contentColor = Color.Black)
+            ) { Text("ADD", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("CANCEL", color = Color(0xFF888888)) }
+        }
+    )
+}
+
+// ─────────────────── TRIANGULATOR MARKER DRAWABLES ──────────────────
+
+/**
+ * Small filled circle in [androidColor], white border.
+ * Used as a sighting-origin pin on the triangulator map.
+ * Dimmed (low alpha) when the sighting is inactive.
+ */
+private fun sightingDotDrawable(context: Context, androidColor: Int, active: Boolean = true): BitmapDrawable {
+    val dp   = context.resources.displayMetrics.density
+    val r    = (8f * dp)
+    val pad  = 3f
+    val size = ((r + pad) * 2).toInt()
+    val bmp  = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val cv   = AndroidCanvas(bmp)
+    val cx   = size / 2f
+    val cy   = size / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // Extract RGB from the (fully opaque) sighting color and apply desired alpha
+    val alpha = if (active) 230 else 90
+    paint.color = android.graphics.Color.argb(
+        alpha,
+        (androidColor shr 16) and 0xFF,
+        (androidColor shr  8) and 0xFF,
+         androidColor         and 0xFF
+    )
+    paint.style = Paint.Style.FILL
+    cv.drawCircle(cx, cy, r, paint)
+    // White border
+    paint.color       = android.graphics.Color.argb(alpha, 255, 255, 255)
+    paint.style       = Paint.Style.STROKE
+    paint.strokeWidth = 2f * dp
+    cv.drawCircle(cx, cy, r - dp, paint)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+/**
+ * Gold target circle — outer ring + small black centre dot.
+ * Used for the triangulated estimated-mark position.
+ */
+private fun estimatedMarkDrawable(context: Context): BitmapDrawable {
+    val dp   = context.resources.displayMetrics.density
+    val r    = (5.5f * dp)
+    val pad  = 2f
+    val size = ((r + pad) * 2).toInt()
+    val bmp  = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val cv   = AndroidCanvas(bmp)
+    val cx   = size / 2f
+    val cy   = size / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // Gold fill
+    paint.color = android.graphics.Color.rgb(255, 200, 0)
+    paint.style = Paint.Style.FILL
+    cv.drawCircle(cx, cy, r, paint)
+    // White border
+    paint.color       = android.graphics.Color.WHITE
+    paint.style       = Paint.Style.STROKE
+    paint.strokeWidth = 1.5f * dp
+    cv.drawCircle(cx, cy, r - dp * 0.75f, paint)
+    // Black centre dot
+    paint.color = android.graphics.Color.BLACK
+    paint.style = Paint.Style.FILL
+    cv.drawCircle(cx, cy, 1.75f * dp, paint)
+    return BitmapDrawable(context.resources, bmp)
 }
 
 // ──────────────────────────── MAP PICKER DIALOG ──────────────────────

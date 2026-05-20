@@ -16,6 +16,7 @@ import com.sailboatracing.bluetooth.NtripClient
 import com.sailboatracing.bluetooth.NtripSourceEntry
 import com.sailboatracing.model.ReplayFrame
 import com.sailboatracing.model.SessionMeta
+import com.sailboatracing.model.Sighting
 import com.sailboatracing.session.SessionLoader
 import kotlinx.coroutines.withContext
 import com.sailboatracing.bluetooth.PacketParser
@@ -96,6 +97,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private var lastGoodHeading: Float? = null
     private var intentionalDisconnect: Boolean = false
+    private var nextSightingId = 0
     // Latest reading from the phone IMU — tracked regardless of BT connection state so the
     // "set start line from phone IMU" override always has a fresh heading available.
     private var lastPhoneImuHeading: Float? = null
@@ -569,6 +571,44 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     fun clearStartLine() {
         _state.update { it.copy(startLine = null, startLineStatus = null, pendingStartPin = null, pendingStartBoat = null) }
         saveStartLine()
+    }
+
+    // ── Mark Triangulator ─────────────────────────────────────────────────
+
+    /** Records the current GPS position + phone compass bearing as a new sighting. */
+    fun addTriangulatorSighting() {
+        val data = _state.value.latestData ?: return
+        if (data.lat == 0.0 && data.lon == 0.0) return
+        val bearing = lastPhoneImuHeading ?: return
+        _state.update { st ->
+            st.copy(
+                triangulatorSightings = st.triangulatorSightings + Sighting(
+                    id = nextSightingId++,
+                    lat = data.lat,
+                    lon = data.lon,
+                    bearingDeg = bearing
+                )
+            )
+        }
+    }
+
+    fun toggleTriangulatorSighting(id: Int) {
+        _state.update { st ->
+            st.copy(triangulatorSightings = st.triangulatorSightings.map {
+                if (it.id == id) it.copy(active = !it.active) else it
+            })
+        }
+    }
+
+    fun removeTriangulatorSighting(id: Int) {
+        _state.update { st ->
+            st.copy(triangulatorSightings = st.triangulatorSightings.filter { it.id != id })
+        }
+    }
+
+    fun clearTriangulatorSightings() {
+        _state.update { it.copy(triangulatorSightings = emptyList()) }
+        nextSightingId = 0
     }
 
     // ── Marks ──────────────────────────────────────────────────────────

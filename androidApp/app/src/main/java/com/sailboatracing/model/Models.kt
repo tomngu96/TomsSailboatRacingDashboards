@@ -65,6 +65,15 @@ data class SensorData(
     val isDirectGpsReading: Boolean = false
 )
 
+/** A single bearing sighting used by the mark triangulator. */
+data class Sighting(
+    val id: Int,
+    val lat: Double,
+    val lon: Double,
+    val bearingDeg: Float,
+    val active: Boolean = true
+)
+
 enum class Tack {
     STARBOARD, PORT
 }
@@ -175,5 +184,7 @@ data class RaceState(
     // Kalman-filtered SOG for display — raw sogKts in latestData is still used for recording/charts
     val smoothedSogKts: Float = 0f,
     // Latest phone IMU heading — updated regardless of BT state for start-line preview/override
-    val phoneImuHeading: Float? = null
+    val phoneImuHeading: Float? = null,
+    // Triangulator sightings — session-only, cleared on explicit "clear all"
+    val triangulatorSightings: List<Sighting> = emptyList()
 )
