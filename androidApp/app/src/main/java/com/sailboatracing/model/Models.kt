@@ -171,5 +171,7 @@ data class RaceState(
     // Auto-select state (populated at connect time when mountpoint is blank)
     val ntripAutoMountpoint: String = "",
     val ntripNearbyMountpoints: List<String> = emptyList(),
-    val ntripAutoMountpointIndex: Int = 0
+    val ntripAutoMountpointIndex: Int = 0,
+    // Kalman-filtered SOG for display — raw sogKts in latestData is still used for recording/charts
+    val smoothedSogKts: Float = 0f
 )

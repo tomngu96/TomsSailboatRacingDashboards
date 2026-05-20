@@ -7,6 +7,7 @@ import android.speech.tts.TextToSpeech
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.sailboatracing.algorithm.HeadedLiftedDetector
+import com.sailboatracing.algorithm.SogKalmanFilter
 import com.sailboatracing.algorithm.StartLineCalculator
 import com.sailboatracing.algorithm.VMGCalculator
 import com.sailboatracing.bluetooth.BluetoothService
@@ -57,6 +58,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     val bluetoothService = BluetoothService(app.applicationContext)
     private val headedLiftedDetector = HeadedLiftedDetector()
+    private val sogFilter = SogKalmanFilter()
     private val phoneGpsService = PhoneGpsService(app.applicationContext)
     private val phoneImuService = PhoneImuService(app.applicationContext)
 
@@ -275,6 +277,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         intentionalDisconnect = true
+        sogFilter.reset()
         AppPreferences.clearLastBtAddress(app.applicationContext)
         bluetoothService.disconnect()
     }
@@ -1232,6 +1235,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
             current.copy(
                 latestData = filteredData,
+                smoothedSogKts = sogFilter.update(filteredData.sogKts),
                 history = newHistory,
                 headingTrend = detectorResult.trend,
                 trendDegrees = detectorResult.degrees,

@@ -131,7 +131,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
             // Speed — always centered
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = if (data != null) "%.1f".format(data.sogKts) else "--.-",
+                    text = if (data != null) "%.1f".format(state.smoothedSogKts) else "--.-",
                     fontSize = 80.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.White,
