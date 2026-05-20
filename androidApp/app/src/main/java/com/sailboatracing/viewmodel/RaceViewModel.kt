@@ -1,6 +1,8 @@
 package com.sailboatracing.viewmodel
 
 import android.app.Application
+import android.media.AudioManager
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -107,6 +109,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     var mapUserPanned: Boolean = false
 
     private var tts: TextToSpeech? = null
+    // Route TTS through the alarm stream so it plays at full alarm volume over the speaker,
+    // unaffected by media volume and not redirected to headphones/BT audio.
+    private val ttsParams = Bundle().apply {
+        putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_ALARM)
+    }
 
     init {
         tts = TextToSpeech(app.applicationContext) { status ->
@@ -352,7 +359,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 val ts = _state.value.timerState
                 if (_state.value.narrateTimer) {
                     if (ts.finished && prevRemainingMs > 0L) {
-                        tts?.speak("Go", TextToSpeech.QUEUE_FLUSH, null, null)
+                        tts?.speak("Go", TextToSpeech.QUEUE_FLUSH, ttsParams, "timer")
                     } else {
                         ttsThresholdCrossed(prevRemainingMs, ts.remainingMs)?.let { threshMs ->
                             ttsSpeak(ttsText(threshMs))
@@ -403,7 +410,7 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     private fun ttsSpeak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, ttsParams, "timer")
     }
 
     private val numberWords = mapOf(
