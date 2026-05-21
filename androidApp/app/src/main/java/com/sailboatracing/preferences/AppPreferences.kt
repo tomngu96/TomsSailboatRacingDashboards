@@ -39,6 +39,8 @@ object AppPreferences {
     private const val KEY_MAP_REFRESH_MS   = "map_refresh_ms"
     private const val KEY_MAP_MIN_MOVEMENT = "map_min_movement_m"
     private const val KEY_MAP_MIN_HEADING  = "map_min_heading_deg"
+    private const val KEY_IMU_MOUNT_PITCH  = "imu_mount_offset_pitch"
+    private const val KEY_IMU_MOUNT_ROLL   = "imu_mount_offset_roll"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -166,6 +168,8 @@ object AppPreferences {
         val mapRefreshIntervalMs: Int = 200,
         val mapMinMovementMeters: Int = 2,
         val mapMinHeadingChangeDeg: Int = 3,
+        val imuMountOffsetPitch: Float = 0f,
+        val imuMountOffsetRoll: Float = 0f,
     )
 
     fun saveSettings(
@@ -192,6 +196,8 @@ object AppPreferences {
         mapRefreshIntervalMs: Int,
         mapMinMovementMeters: Int,
         mapMinHeadingChangeDeg: Int,
+        imuMountOffsetPitch: Float,
+        imuMountOffsetRoll: Float,
     ) {
         val castersJson = JSONArray().also { arr ->
             ntripCasters.forEach { c ->
@@ -229,6 +235,8 @@ object AppPreferences {
             .putInt(KEY_MAP_REFRESH_MS,   mapRefreshIntervalMs)
             .putInt(KEY_MAP_MIN_MOVEMENT, mapMinMovementMeters)
             .putInt(KEY_MAP_MIN_HEADING,  mapMinHeadingChangeDeg)
+            .putFloat(KEY_IMU_MOUNT_PITCH, imuMountOffsetPitch)
+            .putFloat(KEY_IMU_MOUNT_ROLL,  imuMountOffsetRoll)
             .apply()
     }
 
@@ -283,6 +291,8 @@ object AppPreferences {
             mapRefreshIntervalMs   = p.getInt(KEY_MAP_REFRESH_MS,   200),
             mapMinMovementMeters   = p.getInt(KEY_MAP_MIN_MOVEMENT,  2),
             mapMinHeadingChangeDeg = p.getInt(KEY_MAP_MIN_HEADING,   3),
+            imuMountOffsetPitch    = p.getFloat(KEY_IMU_MOUNT_PITCH, 0f),
+            imuMountOffsetRoll     = p.getFloat(KEY_IMU_MOUNT_ROLL,  0f),
         )
     }
 

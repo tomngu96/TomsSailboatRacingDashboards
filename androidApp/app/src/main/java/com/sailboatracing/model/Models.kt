@@ -164,6 +164,10 @@ data class RaceState(
     val showHeadingLines: Boolean = true,
     val headingLineMeters: Int = 1000,
     val imuInverted: Boolean = false,
+    // Mounting offset calibration: pitch/roll values recorded when the boat was level.
+    // Subtracted from raw IMU readings so a tilted phone reports 0° heel when the hull is flat.
+    val imuMountOffsetPitch: Float = 0f,
+    val imuMountOffsetRoll: Float = 0f,
     val usePhoneGps: Boolean = true,
     val phoneGpsActive: Boolean = false,
     val usePhoneImu: Boolean = true,

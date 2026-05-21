@@ -226,6 +226,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 mapRefreshIntervalMs   = settings.mapRefreshIntervalMs,
                 mapMinMovementMeters   = settings.mapMinMovementMeters,
                 mapMinHeadingChangeDeg = settings.mapMinHeadingChangeDeg,
+                imuMountOffsetPitch    = settings.imuMountOffsetPitch,
+                imuMountOffsetRoll     = settings.imuMountOffsetRoll,
             )
         }
 
@@ -268,6 +270,8 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             mapRefreshIntervalMs   = s.mapRefreshIntervalMs,
             mapMinMovementMeters   = s.mapMinMovementMeters,
             mapMinHeadingChangeDeg = s.mapMinHeadingChangeDeg,
+            imuMountOffsetPitch    = s.imuMountOffsetPitch,
+            imuMountOffsetRoll     = s.imuMountOffsetRoll,
         )
     }
 
@@ -772,6 +776,32 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         saveSettings()
     }
 
+    /**
+     * Records current pitch/roll as the "level" reference for the mounted phone.
+     * After this call, all subsequent pitch/roll readings are offset so that the
+     * captured orientation maps to 0°/0° (i.e. boat sitting flat = zero heel/pitch).
+     *
+     * The offset accumulates correctly on repeated calibrations: if the boat was
+     * slightly not-level during a previous calibration, a second calibration when
+     * it IS level will produce the correct net offset.
+     */
+    fun calibrateImuMount() {
+        val s   = _state.value
+        val raw = s.latestData ?: return
+        // raw.pitch/roll are already offset-corrected values; add back current offset to get
+        // the true post-inversion reading, which is what we want as the new reference.
+        val newPitch = raw.pitch + s.imuMountOffsetPitch
+        val newRoll  = raw.roll  + s.imuMountOffsetRoll
+        _state.update { it.copy(imuMountOffsetPitch = newPitch, imuMountOffsetRoll = newRoll) }
+        saveSettings()
+    }
+
+    /** Removes the IMU mounting offset — raw pitch/roll from the IMU are used directly. */
+    fun clearImuMountOffset() {
+        _state.update { it.copy(imuMountOffsetPitch = 0f, imuMountOffsetRoll = 0f) }
+        saveSettings()
+    }
+
     fun setGpsStaleThreshold(seconds: Int) {
         _state.update { it.copy(gpsStaleThresholdSeconds = seconds) }
         saveSettings()
@@ -1018,9 +1048,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 showMap = defaults.showMap,
                 showHeadingLines = defaults.showHeadingLines,
                 headingLineMeters = defaults.headingLineMeters,
-                imuInverted = defaults.imuInverted,
-                cogWindowSeconds = defaults.cogWindowSeconds,
-                dashboardCharts = defaults.dashboardCharts
+                imuInverted          = defaults.imuInverted,
+                imuMountOffsetPitch  = defaults.imuMountOffsetPitch,
+                imuMountOffsetRoll   = defaults.imuMountOffsetRoll,
+                cogWindowSeconds     = defaults.cogWindowSeconds,
+                dashboardCharts      = defaults.dashboardCharts
             )
         }
         AppPreferences.clearSettings(app.applicationContext)
@@ -1211,26 +1243,32 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     private fun onNewData(data: SensorData) {
         // Apply IMU inversion when the board is mounted upside-down:
         // heading mirrors across 180°, roll and pitch negate, yaw rate negates.
-        val data = if (_state.value.imuInverted) data.copy(
+        val invertedData = if (_state.value.imuInverted) data.copy(
             heading = (540f - data.heading) % 360f,
             roll    = -data.roll,
             pitch   = -data.pitch,
             gyroZ   = -data.gyroZ
         ) else data
+        // Apply phone mounting offset so a tilted mount reads 0° pitch/roll when the hull is level.
+        val st = _state.value
+        val offsetData = if (st.imuMountOffsetPitch != 0f || st.imuMountOffsetRoll != 0f) invertedData.copy(
+            pitch = invertedData.pitch - st.imuMountOffsetPitch,
+            roll  = invertedData.roll  - st.imuMountOffsetRoll
+        ) else invertedData
         val currentLast = _state.value.latestData
-        val gpsAugmented = if (!data.isDirectGpsReading &&
+        val gpsAugmented = if (!offsetData.isDirectGpsReading &&
             currentLast != null && (currentLast.lat != 0.0 || currentLast.lon != 0.0)
         ) {
-            data.copy(
+            offsetData.copy(
                 lat     = currentLast.lat,
                 lon     = currentLast.lon,
                 sogKts  = currentLast.sogKts,
                 cogDeg  = currentLast.cogDeg,
                 fixType = currentLast.fixType
             )
-        } else if (data.isDirectGpsReading && currentLast != null && data.sogKts < 0.3f) {
-            data.copy(cogDeg = currentLast.cogDeg)
-        } else data
+        } else if (offsetData.isDirectGpsReading && currentLast != null && offsetData.sogKts < 0.3f) {
+            offsetData.copy(cogDeg = currentLast.cogDeg)
+        } else offsetData
 
         val filteredData = gpsAugmented.copy(heading = filterHeading(gpsAugmented.heading, gpsAugmented.imuAccuracy))
 

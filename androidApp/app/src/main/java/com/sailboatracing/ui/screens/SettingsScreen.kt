@@ -982,6 +982,82 @@ fun SettingsScreen(
                     fontSize = 11.sp,
                     lineHeight = 16.sp
                 )
+
+                HorizontalDivider(color = Color(0xFF2A2A3A))
+
+                // ── Phone mounting offset calibration ─────────────────────
+                val liveData    = state.latestData
+                val offsetPitch = state.imuMountOffsetPitch
+                val offsetRoll  = state.imuMountOffsetRoll
+                val hasOffset   = offsetPitch != 0f || offsetRoll != 0f
+
+                Text(
+                    text = "Phone mounting calibration",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Mount the phone in its sailing position, wait until the boat is flat " +
+                        "and motionless, then tap Calibrate. All heel/pitch readings are then " +
+                        "offset so that a level hull = 0°.",
+                    color = Color(0xFF666666),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+
+                // Live sensor readout
+                if (liveData != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Live  pitch ${"%.1f".format(liveData.pitch)}°  " +
+                                   "roll ${"%.1f".format(liveData.roll)}°",
+                            color = Color(0xFFAAAAAA),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                // Current offset, shown only when non-zero
+                if (hasOffset) {
+                    Text(
+                        text = "Offset  pitch ${"%.1f".format(offsetPitch)}°  " +
+                               "roll ${"%.1f".format(offsetRoll)}°",
+                        color = Color(0xFF888888),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.calibrateImuMount() },
+                        enabled = liveData != null,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFFAB40),
+                            contentColor   = Color.Black
+                        ),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text("CALIBRATE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (hasOffset) {
+                        OutlinedButton(
+                            onClick = { viewModel.clearImuMountOffset() },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6666)),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("CLEAR OFFSET", fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
