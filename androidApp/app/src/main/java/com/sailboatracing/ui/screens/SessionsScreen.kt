@@ -299,6 +299,7 @@ private fun ReplayViewer(
                 factory  = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update   = { mv ->
+                    mv.setUseDataConnection(isNetworkAvailable(context))
                     mv.overlays.clear()
 
                     // Full trail — dim grey

@@ -400,6 +400,7 @@ private fun StartLineMapPreview(
                 .fillMaxWidth()
                 .height(220.dp),
             update = { mv ->
+                mv.setUseDataConnection(isNetworkAvailable(context))
                 val now = System.currentTimeMillis()
                 if (now - courseMapThrottleMs[0] < 200L) return@AndroidView
                 courseMapThrottleMs[0] = now
@@ -1786,6 +1787,7 @@ private fun TriangulatorMap(
             factory  = { mapView },
             modifier = Modifier.fillMaxSize(),
             update   = { mv ->
+                mv.setUseDataConnection(isNetworkAvailable(context))
                 val now = System.currentTimeMillis()
                 if (now - triMapThrottleMs[0] < 200L) return@AndroidView
                 triMapThrottleMs[0] = now
@@ -2147,6 +2149,7 @@ private fun MapPickerDialog(
                 AndroidView(
                     factory = { mapView },
                     update = { mv ->
+                        mv.setUseDataConnection(isNetworkAvailable(context))
                         mv.overlays.clear()
 
                         // Boat position + heading lines
