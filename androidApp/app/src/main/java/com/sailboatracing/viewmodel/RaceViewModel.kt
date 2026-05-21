@@ -24,6 +24,7 @@ import com.sailboatracing.model.NtripCaster
 import com.sailboatracing.location.PhoneGpsService
 import com.sailboatracing.location.PhoneImuService
 import com.sailboatracing.model.DashboardChartType
+import com.sailboatracing.model.MapSnapshot
 import com.sailboatracing.model.LatLng
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.RaceState
@@ -55,6 +56,18 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(RaceState())
     val state: StateFlow<RaceState> = _state.asStateFlow()
+
+    // ── Ring buffers — live outside RaceState to avoid list copies at 25 Hz ──
+    private val _historyDeque = ArrayDeque<SensorData>(1000)
+    private val _trailDeque   = ArrayDeque<SensorData>(5000)
+
+    // Snapshot of history emitted alongside map snapshots (not at 25 Hz)
+    private val _historyFlow = MutableStateFlow<List<SensorData>>(emptyList())
+    val history: StateFlow<List<SensorData>> = _historyFlow.asStateFlow()
+
+    // Dashboard map snapshot — throttled, movement-gated
+    private val _mapSnapshot = MutableStateFlow<MapSnapshot?>(null)
+    val mapSnapshot: StateFlow<MapSnapshot?> = _mapSnapshot.asStateFlow()
 
     val bluetoothService = BluetoothService(app.applicationContext)
     private val headedLiftedDetector = HeadedLiftedDetector()
@@ -112,6 +125,13 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
     var mapCenterLon: Double = 0.0
     // True once the user has manually panned/zoomed — suppresses auto-center on tab re-entry.
     var mapUserPanned: Boolean = false
+
+    private var lastMapUpdateMs:    Long   = 0L
+    private var lastMapLat:         Double = 0.0
+    private var lastMapLon:         Double = 0.0
+    private var lastMapHeadingDeg:  Float  = 0f
+    private var lastMapMarks:       List<com.sailboatracing.model.RaceMark> = emptyList()
+    private var lastMapStartLine:   com.sailboatracing.model.StartLine?     = null
 
     private var tts: TextToSpeech? = null
     // Route TTS through the alarm stream so it plays at full alarm volume over the speaker,
@@ -202,7 +222,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
                 maxRecordingHours = settings.maxRecordingHours,
                 ntripEnabled = settings.ntripEnabled,
                 ntripCasters = settings.ntripCasters,
-                ntripSelectedCasterId = settings.ntripSelectedCasterId
+                ntripSelectedCasterId = settings.ntripSelectedCasterId,
+                mapRefreshIntervalMs   = settings.mapRefreshIntervalMs,
+                mapMinMovementMeters   = settings.mapMinMovementMeters,
+                mapMinHeadingChangeDeg = settings.mapMinHeadingChangeDeg,
             )
         }
 
@@ -241,7 +264,10 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             ntripEnabled = s.ntripEnabled,
             ntripCasters = s.ntripCasters,
             ntripSelectedCasterId = s.ntripSelectedCasterId,
-            ntripNextCasterId = nextCasterId
+            ntripNextCasterId = nextCasterId,
+            mapRefreshIntervalMs   = s.mapRefreshIntervalMs,
+            mapMinMovementMeters   = s.mapMinMovementMeters,
+            mapMinHeadingChangeDeg = s.mapMinHeadingChangeDeg,
         )
     }
 
@@ -776,6 +802,22 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
         saveSettings()
     }
 
+    fun setMapRefreshIntervalMs(ms: Int) {
+        _state.update { it.copy(mapRefreshIntervalMs = ms) }
+        lastMapUpdateMs = 0L          // force next packet to emit a fresh snapshot
+        saveSettings()
+    }
+
+    fun setMapMinMovementMeters(m: Int) {
+        _state.update { it.copy(mapMinMovementMeters = m) }
+        saveSettings()
+    }
+
+    fun setMapMinHeadingChangeDeg(deg: Int) {
+        _state.update { it.copy(mapMinHeadingChangeDeg = deg) }
+        saveSettings()
+    }
+
     fun toggleDashboardChart(type: DashboardChartType) {
         _state.update { current ->
             val charts = current.dashboardCharts
@@ -1192,23 +1234,35 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
         val filteredData = gpsAugmented.copy(heading = filterHeading(gpsAugmented.heading, gpsAugmented.imuAccuracy))
 
-        // Only feed the headed/lifted detector when IMU is actually calibrated
+        // ── 1. Ring buffer updates (O(1) amortised — no list copies) ────
+        _historyDeque.addLast(filteredData)
+        val histCutoff = filteredData.timestampMs - (_state.value.historyWindowSeconds * 1000L)
+        while (_historyDeque.isNotEmpty() && _historyDeque.first().timestampMs < histCutoff) {
+            _historyDeque.removeFirst()
+        }
+
+        if (filteredData.isDirectGpsReading && filteredData.fixType >= 2) {
+            _trailDeque.addLast(filteredData)
+        }
+        val trailCutoff = filteredData.timestampMs - (_state.value.trailWindowSeconds * 1000L)
+        while (_trailDeque.isNotEmpty() && _trailDeque.first().timestampMs < trailCutoff) {
+            _trailDeque.removeFirst()
+        }
+
+        // ── 2. Headed / lifted detector ──────────────────────────────────
         if (gpsAugmented.imuAccuracy >= 1) {
             val detectorCutoff = filteredData.timestampMs - 180_000L
             detectorHistory = (detectorHistory + filteredData).filter { it.timestampMs >= detectorCutoff }
         }
 
-        // Record to session file if active; auto-stop when max duration reached
+        // ── 3. Session recording ─────────────────────────────────────────
         if (_state.value.isRecording) {
             val continued = sessionRecorder.record(filteredData)
             if (!continued) _state.update { it.copy(isRecording = false) }
         }
 
+        // ── 4. State update — scalar/derived fields only, no list copies ─
         _state.update { current ->
-            val windowMs = current.historyWindowSeconds * 1000L
-            val cutoff = filteredData.timestampMs - windowMs
-            val newHistory = (current.history + filteredData).filter { it.timestampMs >= cutoff }
-
             val detectorResult = headedLiftedDetector.evaluate(
                 detectorHistory,
                 current.tack,
@@ -1225,22 +1279,17 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             val bearingToMarkDeg: Float?
             if (activeMark != null && filteredData.fixType >= 2) {
                 val boatPos = LatLng(filteredData.lat, filteredData.lon)
-                // For gate marks, target the midpoint of the two gate ends
                 val targetPos = if (activeMark.isGate && activeMark.gateEnd != null) {
                     LatLng(
                         (activeMark.position.latitude + activeMark.gateEnd.latitude) / 2.0,
                         (activeMark.position.longitude + activeMark.gateEnd.longitude) / 2.0
                     )
-                } else {
-                    activeMark.position
-                }
-                vmgKts = VMGCalculator.vmg(boatPos, targetPos, filteredData.cogDeg, filteredData.sogKts)
-                distToMarkNm = VMGCalculator.distanceNm(boatPos, targetPos)
+                } else activeMark.position
+                vmgKts        = VMGCalculator.vmg(boatPos, targetPos, filteredData.cogDeg, filteredData.sogKts)
+                distToMarkNm  = VMGCalculator.distanceNm(boatPos, targetPos)
                 bearingToMarkDeg = VMGCalculator.bearing(boatPos, targetPos)
             } else {
-                vmgKts = null
-                distToMarkNm = null
-                bearingToMarkDeg = null
+                vmgKts = null; distToMarkNm = null; bearingToMarkDeg = null
             }
 
             val lineConfirmed = current.startLine != null && current.pendingStartPin == null
@@ -1250,20 +1299,11 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
 
             val newLastGpsFixMs = if (filteredData.isDirectGpsReading && filteredData.fixType >= 2) {
                 filteredData.timestampMs
-            } else {
-                current.lastGpsFixMs
-            }
+            } else current.lastGpsFixMs
 
-            val trailCutoff = filteredData.timestampMs - (current.trailWindowSeconds * 1000L)
-            val newTrailHistory = if (filteredData.isDirectGpsReading && filteredData.fixType >= 2) {
-                (current.trailHistory + filteredData).filter { it.timestampMs >= trailCutoff }
-            } else {
-                current.trailHistory.filter { it.timestampMs >= trailCutoff }
-            }
-
-            // Circular mean of COG readings over the last cogWindowSeconds — only when GPS active
-            val cogCutoff = filteredData.timestampMs - (current.cogWindowSeconds * 1000L)
-            val cogSamples = newHistory.filter { it.timestampMs >= cogCutoff && it.fixType >= 2 && it.sogKts >= 0.3f }
+            // COG window — read directly from ring buffer, no list copy
+            val cogCutoff  = filteredData.timestampMs - (current.cogWindowSeconds * 1000L)
+            val cogSamples = _historyDeque.filter { it.timestampMs >= cogCutoff && it.fixType >= 2 && it.sogKts >= 0.3f }
             val historicalCogDeg: Float? = if (cogSamples.size >= 2) {
                 val sinMean = cogSamples.map { sin(Math.toRadians(it.cogDeg.toDouble())) }.average()
                 val cosMean = cogSamples.map { cos(Math.toRadians(it.cogDeg.toDouble())) }.average()
@@ -1273,19 +1313,85 @@ class RaceViewModel(private val app: Application) : AndroidViewModel(app) {
             } else null
 
             current.copy(
-                latestData = filteredData,
-                smoothedSogKts = sogFilter.update(filteredData.sogKts),
-                history = newHistory,
-                headingTrend = detectorResult.trend,
-                trendDegrees = detectorResult.degrees,
-                vmgKts = vmgKts,
-                distToMarkNm = distToMarkNm,
+                latestData       = filteredData,
+                smoothedSogKts   = sogFilter.update(filteredData.sogKts),
+                headingTrend     = detectorResult.trend,
+                trendDegrees     = detectorResult.degrees,
+                vmgKts           = vmgKts,
+                distToMarkNm     = distToMarkNm,
                 bearingToMarkDeg = bearingToMarkDeg,
-                startLineStatus = startLineStatus,
-                lastGpsFixMs = newLastGpsFixMs,
-                trailHistory = newTrailHistory,
+                startLineStatus  = startLineStatus,
+                lastGpsFixMs     = newLastGpsFixMs,
                 historicalCogDeg = historicalCogDeg
             )
         }
+
+        // ── 5. Throttled map + history snapshot ──────────────────────────
+        maybeUpdateMapSnapshot(filteredData)
+    }
+
+    /**
+     * Emit a MapSnapshot at most every [mapRefreshIntervalMs] ms, and only when the boat has
+     * moved >= [mapMinMovementMeters] m or turned >= [mapMinHeadingChangeDeg]°.
+     * Also fires immediately when marks or start-line change (reference-equality check).
+     */
+    private fun maybeUpdateMapSnapshot(data: SensorData) {
+        val now = System.currentTimeMillis()
+        val st  = _state.value
+        val intervalMs = st.mapRefreshIntervalMs.toLong()
+
+        if (now - lastMapUpdateMs < intervalMs) return
+
+        val movedM    = haversineMeters(lastMapLat, lastMapLon, data.lat, data.lon)
+        val hdgDelta  = angleDiffAbs(lastMapHeadingDeg, data.heading)
+        val marksChg  = st.marks     !== lastMapMarks
+        val lineChg   = st.startLine !== lastMapStartLine
+
+        if (movedM    <  st.mapMinMovementMeters &&
+            hdgDelta  <  st.mapMinHeadingChangeDeg &&
+            !marksChg && !lineChg) return
+
+        lastMapUpdateMs   = now
+        lastMapLat        = data.lat
+        lastMapLon        = data.lon
+        lastMapHeadingDeg = data.heading
+        lastMapMarks      = st.marks
+        lastMapStartLine  = st.startLine
+
+        _mapSnapshot.value = MapSnapshot(
+            lat               = data.lat,
+            lon               = data.lon,
+            heading           = data.heading,
+            imuAccuracy       = data.imuAccuracy,
+            cogDeg            = data.cogDeg,
+            sogKts            = data.sogKts,
+            fixType           = data.fixType,
+            historicalCogDeg  = st.historicalCogDeg,
+            startLine         = st.startLine,
+            marks             = st.marks,
+            activeMarkIndex   = st.activeMarkIndex,
+            trail             = _trailDeque.toList(),
+            showHeadingLines  = st.showHeadingLines,
+            headingLineMeters = st.headingLineMeters
+        )
+        _historyFlow.value = _historyDeque.toList()
+    }
+
+    /** Haversine distance in metres between two lat/lon points. */
+    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        if (lat1 == 0.0 && lon1 == 0.0) return Double.MAX_VALUE   // no prior position → always emit
+        val r    = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val s1   = sin(dLat / 2);  val s2 = sin(dLon / 2)
+        val a    = s1 * s1 + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * s2 * s2
+        return r * 2.0 * asin(sqrt(a))
+    }
+
+    /** Absolute angular difference between two headings (0–180°). */
+    private fun angleDiffAbs(a: Float, b: Float): Float {
+        var d = ((b - a) % 360f + 360f) % 360f
+        if (d > 180f) d = 360f - d
+        return d
     }
 }

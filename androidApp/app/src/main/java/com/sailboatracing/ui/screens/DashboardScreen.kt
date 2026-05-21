@@ -71,10 +71,10 @@ import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import kotlin.math.abs
 import com.sailboatracing.model.DashboardChartType
+import com.sailboatracing.model.MapSnapshot
 import com.sailboatracing.model.HeadingTrend
 import com.sailboatracing.model.RaceMark
 import com.sailboatracing.model.SensorData
-import com.sailboatracing.model.StartLine
 import com.sailboatracing.model.StartLineStatus
 import com.sailboatracing.model.Tack
 import com.sailboatracing.ui.theme.PrimaryColor
@@ -92,6 +92,7 @@ import org.osmdroid.views.overlay.Polyline
 @Composable
 fun DashboardScreen(viewModel: RaceViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val historyForCharts by viewModel.history.collectAsStateWithLifecycle()
     val data = state.latestData
 
     Column(
@@ -201,15 +202,7 @@ fun DashboardScreen(viewModel: RaceViewModel) {
         if (state.showMap) {
             RaceMap(
                 viewModel = viewModel,
-                latestData = state.latestData,
-                startLine = state.startLine,
-                marks = state.marks,
-                activeMarkIndex = state.activeMarkIndex,
-                trailHistory = state.trailHistory,
-                showHeadingLines = state.showHeadingLines,
-                headingLineMeters = state.headingLineMeters,
-                historicalCogDeg = state.historicalCogDeg,
-                modifier = Modifier
+                modifier  = Modifier
                     .fillMaxWidth()
                     .height(350.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -217,13 +210,13 @@ fun DashboardScreen(viewModel: RaceViewModel) {
         }
 
         // Inline charts (one per enabled type, in enum order)
-        if (state.dashboardCharts.isNotEmpty() && state.history.isNotEmpty()) {
+        if (state.dashboardCharts.isNotEmpty() && historyForCharts.isNotEmpty()) {
             DashboardChartType.entries.forEach { type ->
                 if (type in state.dashboardCharts) {
                     when (type) {
-                        DashboardChartType.DIRECTION -> DashboardDirectionCard(state.history)
-                        DashboardChartType.ALL       -> DashboardAllCard(state.history)
-                        else -> DashboardInlineChart(history = state.history, chartType = type)
+                        DashboardChartType.DIRECTION -> DashboardDirectionCard(historyForCharts)
+                        DashboardChartType.ALL       -> DashboardAllCard(historyForCharts)
+                        else -> DashboardInlineChart(history = historyForCharts, chartType = type)
                     }
                 }
             }
@@ -446,22 +439,16 @@ private fun InfoCell(
 @Composable
 private fun RaceMap(
     viewModel: RaceViewModel,
-    latestData: SensorData?,
-    startLine: StartLine?,
-    marks: List<RaceMark>,
-    activeMarkIndex: Int,
-    trailHistory: List<SensorData>,
-    showHeadingLines: Boolean,
-    headingLineMeters: Int,
-    historicalCogDeg: Float?,
-    modifier: Modifier = Modifier
+    modifier:  Modifier = Modifier
 ) {
-    val context = LocalContext.current
+    // Collect the throttled snapshot independently — this composable only recomposes
+    // when mapSnapshot changes (≤5 Hz), not at the full 25 Hz sensor rate.
+    val snapshot by viewModel.mapSnapshot.collectAsStateWithLifecycle()
+    val context   = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     Configuration.getInstance().userAgentValue = context.packageName
 
-    // Auto-center is false if the user has previously panned (survives tab switches via ViewModel var).
     val autoCenter = remember { mutableStateOf(!viewModel.mapUserPanned) }
 
     val mapView = remember {
@@ -473,19 +460,19 @@ private fun RaceMap(
                 controller.setCenter(GeoPoint(viewModel.mapCenterLat, viewModel.mapCenterLon))
             }
             isHorizontalMapRepetitionEnabled = false
-            isVerticalMapRepetitionEnabled = false
+            isVerticalMapRepetitionEnabled   = false
             addMapListener(object : MapListener {
                 override fun onScroll(event: ScrollEvent?): Boolean {
                     autoCenter.value = false
                     viewModel.mapUserPanned = true
-                    viewModel.mapCenterLat = this@apply.mapCenter.latitude
-                    viewModel.mapCenterLon = this@apply.mapCenter.longitude
+                    viewModel.mapCenterLat  = this@apply.mapCenter.latitude
+                    viewModel.mapCenterLon  = this@apply.mapCenter.longitude
                     return false
                 }
                 override fun onZoom(event: ZoomEvent?): Boolean {
                     autoCenter.value = false
                     viewModel.mapUserPanned = true
-                    viewModel.mapZoom = this@apply.zoomLevelDouble
+                    viewModel.mapZoom       = this@apply.zoomLevelDouble
                     return false
                 }
             })
@@ -506,65 +493,65 @@ private fun RaceMap(
 
     Box(modifier = modifier) {
         AndroidView(
-            factory = { mapView },
-            update = { mv ->
+            factory  = { mapView },
+            update   = { mv ->
+                val s = snapshot ?: return@AndroidView
+                val hasPosition = s.lat != 0.0 || s.lon != 0.0
+                val hasFix      = s.fixType >= 2
+
                 mv.overlays.clear()
 
-                // GPS trail — amber/orange so it reads on water
-                val trailPoints = trailHistory
+                // GPS trail — amber/orange
+                val trailPoints = s.trail
                     .filter { it.lat != 0.0 || it.lon != 0.0 }
                     .map { GeoPoint(it.lat, it.lon) }
                 if (trailPoints.size >= 2) {
                     Polyline(mv).apply {
                         setPoints(trailPoints)
-                        outlinePaint.color = android.graphics.Color.argb(200, 255, 140, 0)
+                        outlinePaint.color       = android.graphics.Color.argb(200, 255, 140, 0)
                         outlinePaint.strokeWidth = 5f
-                        outlinePaint.style = Paint.Style.STROKE
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-                        outlinePaint.strokeJoin = Paint.Join.ROUND
+                        outlinePaint.style       = Paint.Style.STROKE
+                        outlinePaint.strokeCap   = Paint.Cap.ROUND
+                        outlinePaint.strokeJoin  = Paint.Join.ROUND
                         mv.overlays.add(this)
                     }
                 }
 
-                // Heading / COG projection lines — drawn before boat so marker renders on top
-                val hasPosition = latestData != null && (latestData.lat != 0.0 || latestData.lon != 0.0)
-                val hasFix = (latestData?.fixType ?: 0) >= 2
-                if (showHeadingLines && hasPosition) {
-                    val boatPt = GeoPoint(latestData!!.lat, latestData.lon)
-                    // Green — IMU heading (bow direction), only when IMU is calibrated
-                    if ((latestData.imuAccuracy) >= 1) {
-                        val hdgEnd = projectGeoPoint(latestData.lat, latestData.lon, latestData.heading.toDouble(), headingLineMeters.toDouble())
+                // Heading / COG projection lines
+                if (s.showHeadingLines && hasPosition) {
+                    val boatPt = GeoPoint(s.lat, s.lon)
+                    if (s.imuAccuracy >= 1) {
+                        val hdgEnd = projectGeoPoint(s.lat, s.lon, s.heading.toDouble(), s.headingLineMeters.toDouble())
                         Polyline(mv).apply {
                             setPoints(listOf(boatPt, hdgEnd))
-                            outlinePaint.color = android.graphics.Color.argb(210, 0, 220, 80)
+                            outlinePaint.color       = android.graphics.Color.argb(210, 0, 220, 80)
                             outlinePaint.strokeWidth = 3f
-                            outlinePaint.style = Paint.Style.STROKE
-                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            outlinePaint.style       = Paint.Style.STROKE
+                            outlinePaint.strokeCap   = Paint.Cap.ROUND
                             mv.overlays.add(this)
                         }
                     }
-                    // Red — COG (actual course over ground), only when moving and fix active
-                    val cogDeg = historicalCogDeg ?: latestData.cogDeg
-                    if (hasFix && latestData.sogKts >= 0.3f) {
-                        val cogEnd = projectGeoPoint(latestData.lat, latestData.lon, cogDeg.toDouble(), headingLineMeters.toDouble())
+                    val cogDeg = s.historicalCogDeg ?: s.cogDeg
+                    if (hasFix && s.sogKts >= 0.3f) {
+                        val cogEnd = projectGeoPoint(s.lat, s.lon, cogDeg.toDouble(), s.headingLineMeters.toDouble())
                         Polyline(mv).apply {
                             setPoints(listOf(boatPt, cogEnd))
-                            outlinePaint.color = android.graphics.Color.argb(210, 255, 68, 68)
+                            outlinePaint.color       = android.graphics.Color.argb(210, 255, 68, 68)
                             outlinePaint.strokeWidth = 3f
-                            outlinePaint.style = Paint.Style.STROKE
-                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            outlinePaint.style       = Paint.Style.STROKE
+                            outlinePaint.strokeCap   = Paint.Cap.ROUND
                             mv.overlays.add(this)
                         }
                     }
                 }
 
-                // Boat — orange chevron with black border
+                // Boat marker
                 if (hasPosition) {
-                    val boatPoint = GeoPoint(latestData!!.lat, latestData.lon)
+                    val boatPoint = GeoPoint(s.lat, s.lon)
                     Marker(mv).apply {
                         position = boatPoint
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        icon = boatBitmapDrawable(context, latestData.heading)
+                        icon  = boatBitmapDrawable(context, s.heading)
                         title = ""
                         setOnMarkerClickListener { _, _ -> false }
                         mv.overlays.add(this)
@@ -573,9 +560,9 @@ private fun RaceMap(
                 }
 
                 // Start line
-                if (startLine != null) {
-                    val pinPt  = GeoPoint(startLine.pin.latitude,  startLine.pin.longitude)
-                    val boatPt = GeoPoint(startLine.boat.latitude, startLine.boat.longitude)
+                if (s.startLine != null) {
+                    val pinPt  = GeoPoint(s.startLine.pin.latitude,  s.startLine.pin.longitude)
+                    val boatPt = GeoPoint(s.startLine.boat.latitude, s.startLine.boat.longitude)
                     Marker(mv).apply {
                         position = pinPt; setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                         icon = pinEndBitmapDrawable(context)
@@ -591,34 +578,32 @@ private fun RaceMap(
                         }
                         Polyline(mv).apply {
                             setPoints(listOf(pinPt, boatPt))
-                            outlinePaint.color = android.graphics.Color.parseColor("#FF4444")
+                            outlinePaint.color       = android.graphics.Color.parseColor("#FF4444")
                             outlinePaint.strokeWidth = 4f
-                            outlinePaint.style = Paint.Style.STROKE
+                            outlinePaint.style       = Paint.Style.STROKE
                             mv.overlays.add(this)
                         }
                     }
                 }
 
-                // Race marks — non-active first, active last so it renders on top of overlaps
+                // Race marks
                 fun addMarkOverlays(index: Int, mark: RaceMark) {
-                    val isActive = index == activeMarkIndex
-                    val point = GeoPoint(mark.position.latitude, mark.position.longitude)
+                    val isActive = index == s.activeMarkIndex
+                    val point    = GeoPoint(mark.position.latitude, mark.position.longitude)
                     if (mark.isGate && mark.gateEnd != null) {
                         val gatePoint = GeoPoint(mark.gateEnd.latitude, mark.gateEnd.longitude)
                         Polyline(mv).apply {
                             setPoints(listOf(point, gatePoint))
-                            outlinePaint.color = if (isActive)
-                                android.graphics.Color.argb(220, 255, 221, 0)
-                            else
-                                android.graphics.Color.argb(140, 180, 160, 0)
+                            outlinePaint.color       = if (isActive) android.graphics.Color.argb(220, 255, 221, 0)
+                                                       else          android.graphics.Color.argb(140, 180, 160, 0)
                             outlinePaint.strokeWidth = if (isActive) 4f else 2f
-                            outlinePaint.style = Paint.Style.STROKE
+                            outlinePaint.style       = Paint.Style.STROKE
                             mv.overlays.add(this)
                         }
                         Marker(mv).apply {
                             position = gatePoint
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                            icon = markBitmapDrawable(context, "${mark.name}B", isActive)
+                            icon  = markBitmapDrawable(context, "${mark.name}B", isActive)
                             title = ""; setOnMarkerClickListener { _, _ -> false }
                             mv.overlays.add(this)
                         }
@@ -626,16 +611,15 @@ private fun RaceMap(
                     Marker(mv).apply {
                         position = point
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        icon = markBitmapDrawable(context, mark.name, isActive)
+                        icon  = markBitmapDrawable(context, mark.name, isActive)
                         title = ""; setOnMarkerClickListener { _, _ -> false }
                         mv.overlays.add(this)
                     }
                 }
-                marks.forEachIndexed { index, mark ->
-                    if (index != activeMarkIndex) addMarkOverlays(index, mark)
+                s.marks.forEachIndexed { index, mark ->
+                    if (index != s.activeMarkIndex) addMarkOverlays(index, mark)
                 }
-                // Active mark drawn last — always on top
-                marks.getOrNull(activeMarkIndex)?.let { addMarkOverlays(activeMarkIndex, it) }
+                s.marks.getOrNull(s.activeMarkIndex)?.let { addMarkOverlays(s.activeMarkIndex, it) }
 
                 mv.invalidate()
             },
@@ -647,14 +631,14 @@ private fun RaceMap(
                 onClick = {
                     autoCenter.value = true
                     viewModel.mapUserPanned = false
-                    latestData?.let { d ->
-                        if (d.lat != 0.0 || d.lon != 0.0) mapView.controller.animateTo(GeoPoint(d.lat, d.lon))
+                    snapshot?.let { s ->
+                        if (s.lat != 0.0 || s.lon != 0.0) mapView.controller.animateTo(GeoPoint(s.lat, s.lon))
                     }
                 },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
-                colors = ButtonDefaults.buttonColors(
+                colors   = ButtonDefaults.buttonColors(
                     containerColor = Color(0xCC14141E),
-                    contentColor = PrimaryColor
+                    contentColor   = PrimaryColor
                 )
             ) { Text("CENTER", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         }

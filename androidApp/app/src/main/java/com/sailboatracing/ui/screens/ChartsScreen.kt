@@ -61,7 +61,7 @@ private enum class ChartType(val label: String) {
 fun ChartsScreen(viewModel: RaceViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var selectedChart by remember { mutableStateOf(ChartType.SPEED) }
-    val history = state.history
+    val history by viewModel.history.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier

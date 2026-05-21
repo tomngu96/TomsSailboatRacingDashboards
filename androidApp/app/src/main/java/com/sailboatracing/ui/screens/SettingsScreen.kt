@@ -21,6 +21,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -734,6 +736,89 @@ fun SettingsScreen(
                         uncheckedThumbColor = Color(0xFF888888),
                         uncheckedTrackColor = Color(0xFF333333)
                     )
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFF222222))
+
+        // ── Map Refresh Performance ────────────────────────────────────────────────────
+        SectionHeader("MAP REFRESH PERFORMANCE")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors   = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+            shape    = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Refresh rate chips
+                Text(text = "Map refresh rate", color = Color(0xFF888888), fontSize = 13.sp)
+                val rateOptions = listOf(
+                    "1 Hz"  to 1000,
+                    "2 Hz"  to 500,
+                    "5 Hz"  to 200,
+                    "10 Hz" to 100
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    rateOptions.forEach { (label, ms) ->
+                        FilterChip(
+                            selected = state.mapRefreshIntervalMs == ms,
+                            onClick  = { viewModel.setMapRefreshIntervalMs(ms) },
+                            label    = { Text(label, fontSize = 12.sp) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF1A3050),
+                                selectedLabelColor     = PrimaryColor,
+                                labelColor             = Color(0xFF888888)
+                            )
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFF2A2A2A))
+
+                // Min movement threshold
+                Text(text = "Min movement to redraw", color = Color(0xFF888888), fontSize = 13.sp)
+                SliderWithInput(
+                    value       = state.mapMinMovementMeters,
+                    onValueChange = { viewModel.setMapMinMovementMeters(it) },
+                    valueRange  = 0f..10f,
+                    steps       = 9,
+                    unit        = "m",
+                    accentColor = PrimaryColor
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0 m (always)", color = Color(0xFF666666), fontSize = 11.sp)
+                    Text("10 m",         color = Color(0xFF666666), fontSize = 11.sp)
+                }
+
+                HorizontalDivider(color = Color(0xFF2A2A2A))
+
+                // Min heading change threshold
+                Text(text = "Min heading change to redraw", color = Color(0xFF888888), fontSize = 13.sp)
+                SliderWithInput(
+                    value       = state.mapMinHeadingChangeDeg,
+                    onValueChange = { viewModel.setMapMinHeadingChangeDeg(it) },
+                    valueRange  = 0f..15f,
+                    steps       = 14,
+                    unit        = "°",
+                    accentColor = PrimaryColor
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0° (always)", color = Color(0xFF666666), fontSize = 11.sp)
+                    Text("15°",         color = Color(0xFF666666), fontSize = 11.sp)
+                }
+
+                Text(
+                    text = "The map only redraws when the boat has moved at least the distance threshold AND " +
+                           "turned at least the heading threshold since the last draw. " +
+                           "Set both to 0 to always redraw at the selected rate.",
+                    color    = Color(0xFF555555),
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
                 )
             }
         }

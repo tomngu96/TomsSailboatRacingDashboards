@@ -65,6 +65,28 @@ data class SensorData(
     val isDirectGpsReading: Boolean = false
 )
 
+/**
+ * Snapshot of all data the dashboard map needs, emitted at a throttled rate
+ * (max mapRefreshIntervalMs, and only when the boat has moved/turned enough).
+ * Decouples the map from the 25 Hz sensor flow.
+ */
+data class MapSnapshot(
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
+    val heading: Float = 0f,
+    val imuAccuracy: Int = 0,
+    val cogDeg: Float = 0f,
+    val sogKts: Float = 0f,
+    val fixType: Int = 0,
+    val historicalCogDeg: Float? = null,
+    val startLine: StartLine? = null,
+    val marks: List<RaceMark> = emptyList(),
+    val activeMarkIndex: Int = 0,
+    val trail: List<SensorData> = emptyList(),
+    val showHeadingLines: Boolean = true,
+    val headingLineMeters: Int = 1000
+)
+
 /** A single bearing sighting used by the mark triangulator. */
 data class Sighting(
     val id: Int,
@@ -126,7 +148,6 @@ data class RaceState(
     val connected: Boolean = false,
     val pairedDevices: List<android.bluetooth.BluetoothDevice> = emptyList(),
     val latestData: SensorData? = null,
-    val history: List<SensorData> = emptyList(),
     val headingTrend: HeadingTrend = HeadingTrend.NEUTRAL,
     val trendDegrees: Float = 0f,
     val tack: Tack = Tack.STARBOARD,
@@ -157,8 +178,6 @@ data class RaceState(
     // Non-null while only one end of the start line has been set
     val pendingStartPin: LatLng? = null,
     val pendingStartBoat: LatLng? = null,
-    // GPS trail — only direct GPS readings, windowed to trailWindowSeconds
-    val trailHistory: List<SensorData> = emptyList(),
     val trailWindowSeconds: Int = 60,
     // Observed COG averaged over the last cogWindowSeconds (circular mean of GPS COG readings)
     val cogWindowSeconds: Int = 1,
@@ -185,6 +204,10 @@ data class RaceState(
     val smoothedSogKts: Float = 0f,
     // Latest phone IMU heading — updated regardless of BT state for start-line preview/override
     val phoneImuHeading: Float? = null,
+    // Dashboard map throttle — how often to rebuild overlays and minimum change to trigger a redraw
+    val mapRefreshIntervalMs: Int = 200,    // 200 ms = 5 Hz default
+    val mapMinMovementMeters: Int = 2,      // metres
+    val mapMinHeadingChangeDeg: Int = 3,    // degrees
     // Triangulator sightings — session-only, cleared on explicit "clear all"
     val triangulatorSightings: List<Sighting> = emptyList()
 )

@@ -393,12 +393,16 @@ private fun StartLineMapPreview(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0F))
     ) {
+        val courseMapThrottleMs = remember { longArrayOf(0L) }
         AndroidView(
             factory = { mapView },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp),
             update = { mv ->
+                val now = System.currentTimeMillis()
+                if (now - courseMapThrottleMs[0] < 200L) return@AndroidView
+                courseMapThrottleMs[0] = now
                 mv.overlays.clear()
 
                 // 1. Heading + COG lines first so projected start-line previews render on top
@@ -1777,10 +1781,14 @@ private fun TriangulatorMap(
         shape    = RoundedCornerShape(0.dp),
         colors   = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0F))
     ) {
+        val triMapThrottleMs = remember { longArrayOf(0L) }
         AndroidView(
             factory  = { mapView },
             modifier = Modifier.fillMaxSize(),
             update   = { mv ->
+                val now = System.currentTimeMillis()
+                if (now - triMapThrottleMs[0] < 200L) return@AndroidView
+                triMapThrottleMs[0] = now
                 mv.overlays.clear()
 
                 // 1. Sighting rays — colored, 4 km forward, dimmed when inactive

@@ -36,6 +36,9 @@ object AppPreferences {
     private const val KEY_NTRIP_SELECTED_ID = "ntrip_selected_id"
     private const val KEY_NTRIP_NEXT_ID = "ntrip_next_id"
     private const val KEY_LAST_BT_ADDRESS = "last_bt_address"
+    private const val KEY_MAP_REFRESH_MS   = "map_refresh_ms"
+    private const val KEY_MAP_MIN_MOVEMENT = "map_min_movement_m"
+    private const val KEY_MAP_MIN_HEADING  = "map_min_heading_deg"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -159,7 +162,10 @@ object AppPreferences {
         val ntripEnabled: Boolean = true,
         val ntripCasters: List<NtripCaster> = NtripCaster.DEFAULTS,
         val ntripSelectedCasterId: Int = 0,
-        val ntripNextCasterId: Int = NtripCaster.DEFAULTS.size
+        val ntripNextCasterId: Int = NtripCaster.DEFAULTS.size,
+        val mapRefreshIntervalMs: Int = 200,
+        val mapMinMovementMeters: Int = 2,
+        val mapMinHeadingChangeDeg: Int = 3,
     )
 
     fun saveSettings(
@@ -182,7 +188,10 @@ object AppPreferences {
         ntripEnabled: Boolean,
         ntripCasters: List<NtripCaster>,
         ntripSelectedCasterId: Int,
-        ntripNextCasterId: Int
+        ntripNextCasterId: Int,
+        mapRefreshIntervalMs: Int,
+        mapMinMovementMeters: Int,
+        mapMinHeadingChangeDeg: Int,
     ) {
         val castersJson = JSONArray().also { arr ->
             ntripCasters.forEach { c ->
@@ -217,6 +226,9 @@ object AppPreferences {
             .putString(KEY_NTRIP_CASTERS, castersJson)
             .putInt(KEY_NTRIP_SELECTED_ID, ntripSelectedCasterId)
             .putInt(KEY_NTRIP_NEXT_ID, ntripNextCasterId)
+            .putInt(KEY_MAP_REFRESH_MS,   mapRefreshIntervalMs)
+            .putInt(KEY_MAP_MIN_MOVEMENT, mapMinMovementMeters)
+            .putInt(KEY_MAP_MIN_HEADING,  mapMinHeadingChangeDeg)
             .apply()
     }
 
@@ -267,7 +279,10 @@ object AppPreferences {
                 } catch (_: Exception) { NtripCaster.DEFAULTS }
             },
             ntripSelectedCasterId = p.getInt(KEY_NTRIP_SELECTED_ID, 0),
-            ntripNextCasterId = p.getInt(KEY_NTRIP_NEXT_ID, NtripCaster.DEFAULTS.size)
+            ntripNextCasterId = p.getInt(KEY_NTRIP_NEXT_ID, NtripCaster.DEFAULTS.size),
+            mapRefreshIntervalMs   = p.getInt(KEY_MAP_REFRESH_MS,   200),
+            mapMinMovementMeters   = p.getInt(KEY_MAP_MIN_MOVEMENT,  2),
+            mapMinHeadingChangeDeg = p.getInt(KEY_MAP_MIN_HEADING,   3),
         )
     }
 
