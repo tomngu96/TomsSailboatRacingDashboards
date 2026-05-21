@@ -496,6 +496,9 @@ private fun RaceMap(
             factory  = { mapView },
             update   = { mv ->
                 val s = snapshot ?: return@AndroidView
+                // Allow pre-downloaded tiles to render when offline.
+                // OsmDroid can block its own SQL cache when ConnectivityManager reports no network.
+                mv.setUseDataConnection(isNetworkAvailable(context))
                 val hasPosition = s.lat != 0.0 || s.lon != 0.0
                 val hasFix      = s.fixType >= 2
 

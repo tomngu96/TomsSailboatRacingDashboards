@@ -6,10 +6,33 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.BitmapDrawable
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 
 /**
- * Shared map marker drawables used by DashboardScreen and SessionsScreen.
+ * Shared map utilities used by DashboardScreen, CourseScreen, and SessionsScreen.
  */
+
+/**
+ * Returns true when the device has an active internet-capable network connection.
+ *
+ * OsmDroid's default behaviour with [MapView.setUseDataConnection] = true can short-circuit
+ * its tile-loading pipeline when ConnectivityManager reports no network, preventing even
+ * pre-downloaded SQL-cache tiles from rendering.  Callers should pass this result to
+ * [MapView.setUseDataConnection] so that offline tiles are served from the SQL cache.
+ */
+fun isNetworkAvailable(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val network = cm.activeNetwork ?: return false
+        val caps    = cm.getNetworkCapabilities(network) ?: return false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    } else {
+        @Suppress("DEPRECATION")
+        cm.activeNetworkInfo?.isConnected == true
+    }
+}
 
 fun boatBitmapDrawable(context: Context, headingDeg: Float): BitmapDrawable {
     val dp   = context.resources.displayMetrics.density
