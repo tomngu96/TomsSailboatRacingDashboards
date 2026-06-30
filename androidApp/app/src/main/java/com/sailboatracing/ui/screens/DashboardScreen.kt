@@ -315,10 +315,19 @@ private fun CourseInfoCard(
                 ) {
                     // LINE DIST — tappable to toggle m / nm
                     val distNm = startLineStatus.distanceToLineNm
+                    val distM = distNm * 1852f
                     InfoCell(
                         label = "LINE DIST",
-                        value = if (showMeters) "%.0f".format(distNm * 1852f) else "%.3f".format(distNm),
-                        unit = if (showMeters) "m" else "nm",
+                        value = when {
+                            !showMeters -> "%.3f".format(distNm)
+                            distM >= 1000f -> "%.2f".format(distM / 1000f)
+                            else -> "%.0f".format(distM)
+                        },
+                        unit = when {
+                            !showMeters -> "nm"
+                            distM >= 1000f -> "km"
+                            else -> "m"
+                        },
                         modifier = Modifier.clickable { showMeters = !showMeters }
                     )
 
@@ -371,13 +380,20 @@ private fun CourseInfoCard(
                         unit = "kts"
                     )
                     // Distance — tappable to toggle m / nm
+                    val distM = (distToMarkNm ?: 0f) * 1852f
                     InfoCell(
                         label = shownMark?.name ?: "MARK",
-                        value = if (distToMarkNm != null) {
-                            if (showMeters) "%.0f".format(distToMarkNm * 1852f)
-                            else "%.2f".format(distToMarkNm)
-                        } else "-",
-                        unit = if (showMeters) "m" else "nm",
+                        value = when {
+                            distToMarkNm == null -> "-"
+                            !showMeters -> "%.2f".format(distToMarkNm)
+                            distM >= 1000f -> "%.2f".format(distM / 1000f)
+                            else -> "%.0f".format(distM)
+                        },
+                        unit = when {
+                            !showMeters -> "nm"
+                            distM >= 1000f -> "km"
+                            else -> "m"
+                        },
                         modifier = Modifier.clickable { showMeters = !showMeters }
                     )
                     InfoCell(
