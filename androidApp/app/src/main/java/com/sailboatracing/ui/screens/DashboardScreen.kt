@@ -336,12 +336,13 @@ private fun CourseInfoCard(
                     val delta: Float? = if (showDelta && timerRemainingSeconds != null && trueTime != null) {
                         trueTime - timerRemainingSeconds  // positive = late, negative = early
                     } else null
-                    val trueTimeValue = when {
-                        delta != null && delta > 0f  -> "+%.0f".format(delta)
-                        delta != null && delta <= 0f -> "%.0f".format(delta)
-                        trueTime != null             -> "%.0f".format(trueTime)
-                        else                         -> "--"
+                    val trueTimeValue = if (delta != null) {
+                        val sign = if (delta > 0f) "+" else if (delta < 0f) "-" else ""
+                        sign + formatDuration(abs(delta))
+                    } else {
+                        formatDuration(trueTime)
                     }
+
                     val trueTimeColor = when {
                         delta == null     -> Color.White
                         delta < -5f       -> Color(0xFFFF4444)  // early/fast = OCS risk
@@ -352,7 +353,7 @@ private fun CourseInfoCard(
                     InfoCell(
                         label = "CUR TIME TO",
                         value = trueTimeValue,
-                        unit = "s",
+                        unit = if (trueTimeValue.contains(":") || trueTimeValue.contains("h")) "" else "s",
                         valueColor = trueTimeColor,
                         modifier = Modifier.clickable {
                             if (timerRemainingSeconds != null) showDelta = !showDelta
@@ -374,10 +375,12 @@ private fun CourseInfoCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    val markValueFontSize = 20.sp
                     InfoCell(
                         label = "VMG",
                         value = if (vmgKts != null) "%.1f".format(vmgKts) else "--.-",
-                        unit = "kts"
+                        unit = "kts",
+                        valueFontSize = markValueFontSize
                     )
                     // Distance — tappable to toggle m / nm
                     val distM = (distToMarkNm ?: 0f) * 1852f
@@ -394,12 +397,27 @@ private fun CourseInfoCard(
                             distM >= 1000f -> "km"
                             else -> "m"
                         },
+                        valueFontSize = markValueFontSize,
                         modifier = Modifier.clickable { showMeters = !showMeters }
                     )
+
+                    // CUR TIME TO — time to mark based on current VMG
+                    val ttms = if (vmgKts != null && vmgKts > 0.1f && distToMarkNm != null) {
+                        (distToMarkNm / vmgKts * 3600f)
+                    } else null
+                    val timeValue = formatDuration(ttms)
+                    InfoCell(
+                        label = "TIME TO",
+                        value = timeValue,
+                        unit = "",
+                        valueFontSize = markValueFontSize
+                    )
+
                     InfoCell(
                         label = "REQ COG",
                         value = if (bearingToMarkDeg != null) "%03.0f°".format(bearingToMarkDeg) else "---",
-                        unit = ""
+                        unit = "",
+                        valueFontSize = markValueFontSize
                     )
                 }
             }
@@ -434,17 +452,33 @@ private fun InfoCell(
     value: String,
     unit: String,
     valueColor: Color = Color.White,
+    valueFontSize: androidx.compose.ui.unit.TextUnit = 24.sp,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = label, fontSize = 10.sp, color = Color(0xFF888888))
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = Color(0xFF888888),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(text = value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = valueColor)
+            Text(text = value, fontSize = valueFontSize, fontWeight = FontWeight.Bold, color = valueColor)
             if (unit.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(3.dp))
                 Text(text = unit, fontSize = 12.sp, color = Color(0xFF888888))
             }
         }
+    }
+}
+
+private fun formatDuration(seconds: Float?): String {
+    if (seconds == null) return "--:--"
+    val absSec = abs(seconds)
+    return when {
+        absSec < 3600f -> "%d:%02d".format((absSec / 60).toInt(), (absSec % 60).toInt())
+        else -> "%dh%02d".format((absSec / 3600).toInt(), ((absSec % 3600) / 60).toInt())
     }
 }
 
